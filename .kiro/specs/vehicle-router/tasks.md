@@ -33,7 +33,7 @@
   - Add INFO-level logging for optimization progress and results
   - _Requirements: 1.1, 1.2, 1.3, 4.4_
 
-- [ ] 5. Implement solution validation system
+- [x] 5. Implement solution validation system
   - Create SolutionValidator class in vehicle_router/validation.py
   - Code check_capacity() method verifying truck capacity constraints are satisfied
   - Code check_all_orders_delivered() method ensuring every order is assigned
@@ -42,7 +42,7 @@
   - Add detailed error reporting for constraint violations
   - _Requirements: 3.3, 5.4_
 
-- [ ] 6. Create visualization and plotting capabilities
+- [x] 6. Create visualization and plotting capabilities
   - Implement plotting functions in vehicle_router/plotting.py
   - Code plot_routes() function visualizing delivery routes on 2D grid using matplotlib
   - Code plot_costs() function showing bar chart of truck cost contributions
@@ -50,7 +50,7 @@
   - Ensure clean, clear plots with proper labels and legends using seaborn styling
   - _Requirements: 4.2, 4.5_
 
-- [ ] 7. Implement main application workflow
+- [x] 7. Implement main application workflow
   - Create src/__init__.py for source package
   - Code src/main.py implementing complete workflow orchestration
   - Integrate data generation, optimization, validation, and visualization steps
@@ -59,7 +59,7 @@
   - Add error handling and graceful failure modes
   - _Requirements: 4.8, 2.1, 2.2, 2.3_
 
-- [ ] 8. Create comprehensive unit tests
+- [x] 8. Create comprehensive unit tests
   - Implement tests/test_data_generator.py testing all DataGenerator methods
   - Create tests/test_optimizer.py testing VrpOptimizer with known inputs and expected outputs
   - Code tests/test_validation.py testing SolutionValidator with valid and invalid solutions
@@ -67,7 +67,7 @@
   - Ensure tests use the example data for reproducible results
   - _Requirements: 5.4, 4.9_
 
-- [ ] 9. Write comprehensive documentation
+- [x] 9. Write comprehensive documentation
   - Create README.md with problem description, installation instructions, and usage examples
   - Write docs/index.md with project overview and getting started guide
   - Create docs/model_description.md explaining MILP formulation, variables, and constraints
@@ -75,10 +75,26 @@
   - Include example solution output and sample plots in documentation
   - _Requirements: 4.1, 4.2_
 
-- [ ] 10. Final integration and testing
+- [x] 10. Final integration and testing
   - Run complete end-to-end test with example data to verify expected output
   - Verify console output matches specified format: "Selected Trucks: [1, 3], Truck 1 -> Orders [A, B], etc."
   - Test installation process using pip install -r requirements.txt
   - Validate all logging output follows specified format with INFO level messages
   - Ensure all code follows clean code principles with meaningful names and extensive comments
+  - _Requirements: 3.1, 3.2, 5.1, 5.2, 5.3_
+
+  - [x] 11. Create a Streamlit application
+  - Create a streamlit application to demonstrate how solution works
+  - App should be located in folder named app
+  - Create a app_utils folder with all utils used for the app
+  - Streamlit app should be modularized using imports from app_utils folder and well structured
+  - Streamlit app should have 4 sections and sidebar.
+  - Sidebar should load data (or load example) and button to run the solver optimization
+  - App should have sections with Introduction, Data Exploration, Solution Analysis, Visualization, Methodology
+  - Introduction should explain how app works and objective of the application
+  - Data Exploration should visualize each table with all data
+  - Solution Analysis should have the solver results with diagnosis and export options in excel
+  - Visualization should have the same plots as the ones we have in main
+  - Methodology should explain in details how the solver works and all details
+  - Once done, update documentation and structure to include the app
   - _Requirements: 3.1, 3.2, 5.1, 5.2, 5.3_
