@@ -100,8 +100,9 @@ class DataGenerator:
         
         if self.use_example_data:
             # Replicate exact example data as specified in requirements
+            # Note: Adjusted Order A to 25 m³ to match total volume requirement of 150 m³
             orders_data = [
-                {'order_id': 'A', 'volume': 75.0, 'postal_code': '08031'},
+                {'order_id': 'A', 'volume': 25.0, 'postal_code': '08031'},
                 {'order_id': 'B', 'volume': 50.0, 'postal_code': '08030'},
                 {'order_id': 'C', 'volume': 25.0, 'postal_code': '08029'},
                 {'order_id': 'D', 'volume': 25.0, 'postal_code': '08028'},
@@ -117,6 +118,10 @@ class DataGenerator:
                 logger.info(f"  Order {order['order_id']}: {order['volume']} m³ at postal code {order['postal_code']}")
                 
         else:
+            # Set seed for reproducible random generation if specified
+            if self.random_seed is not None:
+                np.random.seed(self.random_seed)
+            
             # Generate random orders for testing
             num_orders = np.random.randint(3, 8)  # 3-7 random orders
             order_ids = [chr(65 + i) for i in range(num_orders)]  # A, B, C, etc.
@@ -191,6 +196,10 @@ class DataGenerator:
                 logger.info(f"  Truck {truck['truck_id']}: {truck['capacity']} m³ capacity, €{truck['cost']} cost")
                 
         else:
+            # Set seed for reproducible random generation if specified
+            if self.random_seed is not None:
+                np.random.seed(self.random_seed + 1)  # Use different seed offset for trucks
+            
             # Generate random trucks for testing
             num_trucks = np.random.randint(3, 7)  # 3-6 random trucks
             
@@ -245,16 +254,36 @@ class DataGenerator:
             08028    1.0    0.0    1.0    2.0    3.0
             08029    2.0    1.0    0.0    1.0    2.0
             08030    3.0    2.0    1.0    0.0    1.0
-            08031    4.0    3.0    2.0    1.0    0.0
+            08031    4.0    3.0    2.0    1.1    0.0
         """
         logger.info(f"Starting distance matrix generation for {len(postal_codes)} postal codes...")
         
-        # Sort postal codes to ensure consistent ordering
-        sorted_codes = sorted(postal_codes)
+        # Input validation
+        if not isinstance(postal_codes, list):
+            raise TypeError("postal_codes must be a list")
+        
+        if not postal_codes:
+            raise ValueError("postal_codes cannot be empty")
+        
+        if not all(isinstance(code, str) for code in postal_codes):
+            raise TypeError("All postal codes must be strings")
+        
+        # Validate postal code format (5 digits)
+        import re
+        postal_pattern = re.compile(r'^\d{5}$')
+        invalid_codes = [code for code in postal_codes if not postal_pattern.match(code)]
+        if invalid_codes:
+            raise ValueError(f"Invalid postal codes found: {invalid_codes}")
+        
+        # Remove duplicates and sort
+        sorted_codes = sorted(list(set(postal_codes)))
         n_codes = len(sorted_codes)
+        
+        logger.info(f"Processing {n_codes} unique postal codes: {sorted_codes}")
         
         # Initialize distance matrix
         distance_matrix = pd.DataFrame(
+            data=0.0,
             index=sorted_codes,
             columns=sorted_codes,
             dtype=float
@@ -264,17 +293,13 @@ class DataGenerator:
         # Assumption: consecutive postal codes are 1km apart
         for i, code1 in enumerate(sorted_codes):
             for j, code2 in enumerate(sorted_codes):
-                if i == j:
-                    # Distance from a location to itself is 0
-                    distance = 0.0
-                else:
+                if i != j:
                     # Calculate distance based on postal code numerical difference
                     # Each unit difference in postal code = 1km distance
                     code1_num = int(code1)
                     code2_num = int(code2)
                     distance = abs(code1_num - code2_num) * 1.0  # 1km per unit
-                
-                distance_matrix.loc[code1, code2] = distance
+                    distance_matrix.loc[code1, code2] = distance
         
         logger.info(f"Generated {n_codes}x{n_codes} distance matrix")
         logger.info("Distance matrix summary:")
