@@ -121,7 +121,22 @@ The application requires the following Python packages:
 
 ### Streamlit Web Application
 
-Launch the interactive web application:
+#### Quick Start (Recommended)
+
+Use the automated run script that installs requirements and launches the app:
+
+```bash
+# Cross-platform Python script
+python run_app.py
+
+# Or use platform-specific scripts:
+./run_app.sh        # Unix/Linux/macOS
+run_app.bat         # Windows
+```
+
+#### Manual Launch
+
+Alternatively, launch the interactive web application manually:
 
 ```bash
 streamlit run app/streamlit_app.py
