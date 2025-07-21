@@ -8,8 +8,6 @@ analyze solutions, and visualize results through a user-friendly web interface.
 
 Usage:
     streamlit run app/streamlit_app.py
-
-Author: Vehicle Router Team
 """
 
 import streamlit as st
@@ -188,12 +186,41 @@ class VehicleRouterApp:
         if st.session_state.data_loaded:
             st.sidebar.markdown("### 🎯 Optimization")
             
-            # Optimization parameters
+            # Model selection
+            st.sidebar.markdown("**Model Configuration:**")
+            use_enhanced_model = st.sidebar.checkbox(
+                "🚀 Enhanced Model with Distance Optimization", 
+                value=True,
+                help="Use advanced model that minimizes both truck costs and travel distances"
+            )
+            
+            # Objective weights (only for enhanced model)
+            if use_enhanced_model:
+                st.sidebar.markdown("**Objective Weights:**")
+                cost_weight = st.sidebar.slider(
+                    "Cost Weight", 
+                    min_value=0.0, max_value=1.0, value=0.6, step=0.1,
+                    help="Weight for truck costs in objective function"
+                )
+                distance_weight = st.sidebar.slider(
+                    "Distance Weight", 
+                    min_value=0.0, max_value=1.0, value=0.4, step=0.1,
+                    help="Weight for travel distances in objective function"
+                )
+                
+                # Normalize weights to sum to 1
+                total_weight = cost_weight + distance_weight
+                if total_weight > 0:
+                    cost_weight = cost_weight / total_weight
+                    distance_weight = distance_weight / total_weight
+                    st.sidebar.info(f"Normalized weights: Cost={cost_weight:.2f}, Distance={distance_weight:.2f}")
+            
+            # Solver parameters
             st.sidebar.markdown("**Solver Parameters:**")
             solver_timeout = st.sidebar.slider(
                 "Solver Timeout (seconds)", 
-                min_value=10, max_value=300, value=60,
-                help="Maximum time allowed for optimization"
+                min_value=30, max_value=600, value=120 if use_enhanced_model else 60,
+                help="Maximum time allowed for optimization (enhanced model needs more time)"
             )
             
             enable_validation = st.sidebar.checkbox(
@@ -205,19 +232,38 @@ class VehicleRouterApp:
             # Run optimization button
             if st.sidebar.button("🚀 Run Optimization", type="primary"):
                 with st.spinner("Running optimization..."):
-                    success = self.optimization_runner.run_optimization(
-                        st.session_state.orders_df,
-                        st.session_state.trucks_df,
-                        st.session_state.distance_matrix,
-                        solver_timeout=solver_timeout,
-                        enable_validation=enable_validation
-                    )
+                    if use_enhanced_model:
+                        success = self.optimization_runner.run_optimization(
+                            st.session_state.orders_df,
+                            st.session_state.trucks_df,
+                            st.session_state.distance_matrix,
+                            solver_timeout=solver_timeout,
+                            enable_validation=enable_validation,
+                            use_enhanced_model=True,
+                            cost_weight=cost_weight,
+                            distance_weight=distance_weight
+                        )
+                    else:
+                        success = self.optimization_runner.run_optimization(
+                            st.session_state.orders_df,
+                            st.session_state.trucks_df,
+                            st.session_state.distance_matrix,
+                            solver_timeout=solver_timeout,
+                            enable_validation=enable_validation,
+                            use_enhanced_model=False
+                        )
                     
                     if success:
                         st.session_state.solution = self.optimization_runner.solution
                         st.session_state.optimization_log = self.optimization_runner.optimization_log
                         st.session_state.optimization_complete = True
                         st.sidebar.success("✅ Optimization completed successfully!")
+                        
+                        # Show enhanced metrics if available
+                        if use_enhanced_model and 'costs' in st.session_state.solution:
+                            if 'total_distance' in st.session_state.solution['costs']:
+                                total_distance = st.session_state.solution['costs']['total_distance']
+                                st.sidebar.info(f"📏 Total Distance: {total_distance:.1f} km")
                     else:
                         st.sidebar.error("❌ Optimization failed")
         

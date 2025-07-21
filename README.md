@@ -1,14 +1,27 @@
 # Vehicle Router
 
-A production-ready Python application for solving Vehicle Routing Problems (VRP) with order assignment optimization using Mixed Integer Linear Programming (MILP). Includes both a command-line interface and an interactive Streamlit web application.
+A production-ready Python application for solving Vehicle Routing Problems (VRP) with both order assignment and route optimization using Mixed Integer Linear Programming (MILP). Features dual optimization models: standard cost minimization and enhanced distance-aware routing. Includes both a command-line interface and an interactive Streamlit web application.
 
 ## Problem Description
 
-The Vehicle Router solves the classic Vehicle Routing Problem with capacity constraints, where the goal is to optimally assign orders to trucks and determine delivery routes while minimizing total operational costs. The system considers:
+The Vehicle Router solves the Capacitated Vehicle Routing Problem (CVRP) with two optimization approaches:
 
+### Standard Model
+- **Objective**: Minimize total truck operational costs
+- **Focus**: Optimal truck selection and order assignment
+- **Use Case**: When fixed truck costs dominate variable costs
+
+### Enhanced Model (NEW)
+- **Objective**: Minimize weighted combination of truck costs and travel distances
+- **Focus**: Comprehensive route optimization with distance minimization
+- **Features**: Multi-objective optimization, route sequencing, depot constraints
+- **Use Case**: When both cost efficiency and route optimization are important
+
+Both models consider:
 - **Order Requirements**: Each order has a specific volume and delivery location (postal code)
 - **Truck Constraints**: Each truck has a maximum capacity and associated operational cost
-- **Optimization Goal**: Minimize total cost while ensuring all orders are delivered within capacity limits
+- **Distance Matrix**: Travel distances between all postal code locations
+- **Capacity Limits**: Ensuring all orders are delivered within truck capacity constraints
 
 ### Example Problem
 
@@ -50,7 +63,8 @@ vehicle_router/
 ├── vehicle_router/              # Core optimization package
 │   ├── __init__.py
 │   ├── data_generator.py       # Data generation and management
-│   ├── optimizer.py            # MILP optimization engine
+│   ├── optimizer.py            # Standard MILP optimization engine
+│   ├── enhanced_optimizer.py   # Enhanced MILP with distance optimization
 │   ├── plotting.py             # Visualization and plotting
 │   ├── validation.py           # Solution validation
 │   └── utils.py                # Utility functions
@@ -143,9 +157,12 @@ streamlit run app/streamlit_app.py
 ```
 
 The Streamlit application provides:
+- **Dual Optimization Models**: Choose between standard cost minimization or enhanced distance-aware routing
+- **Multi-Objective Optimization**: Configure weights for cost vs. distance optimization
 - **Interactive Data Loading**: Upload custom CSV files or use example data
-- **Real-time Optimization**: Run optimization with configurable parameters
-- **Interactive Visualizations**: Explore results with Plotly charts
+- **Real-time Optimization**: Run optimization with configurable parameters and solver timeout
+- **Enhanced Route Visualization**: View actual route sequences with distances and depot locations
+- **Interactive Visualizations**: Explore results with Plotly charts including route maps and cost analysis
 - **Data Export**: Download results in Excel, CSV, or text formats
 - **Comprehensive Analysis**: Detailed solution analysis and methodology explanation
 

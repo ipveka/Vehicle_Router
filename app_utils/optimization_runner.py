@@ -17,6 +17,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from vehicle_router.optimizer import VrpOptimizer
+from vehicle_router.enhanced_optimizer import EnhancedVrpOptimizer
 from vehicle_router.validation import SolutionValidator
 
 
@@ -37,8 +38,9 @@ class OptimizationRunner:
         self.solve_time = 0.0
     
     def run_optimization(self, orders_df: pd.DataFrame, trucks_df: pd.DataFrame, 
-                        distance_matrix: pd.DataFrame, solver_timeout: int = 60,
-                        enable_validation: bool = True) -> bool:
+                         distance_matrix: pd.DataFrame, solver_timeout: int = 60,
+                         enable_validation: bool = True, use_enhanced_model: bool = True,
+                         cost_weight: float = 0.6, distance_weight: float = 0.4) -> bool:
         """
         Run the complete optimization process
         
@@ -48,6 +50,9 @@ class OptimizationRunner:
             distance_matrix: Distance matrix
             solver_timeout: Maximum solver time in seconds
             enable_validation: Whether to validate the solution
+            use_enhanced_model: Whether to use enhanced model with distance optimization
+            cost_weight: Weight for truck costs in objective (0-1)
+            distance_weight: Weight for distance costs in objective (0-1)
             
         Returns:
             bool: True if optimization successful, False otherwise
@@ -57,8 +62,14 @@ class OptimizationRunner:
         
         try:
             # Initialize optimizer
-            self._log("Initializing optimization engine...")
-            self.optimizer = VrpOptimizer(orders_df, trucks_df, distance_matrix)
+            if use_enhanced_model:
+                self._log("Initializing enhanced optimization engine with distance minimization...")
+                self.optimizer = EnhancedVrpOptimizer(orders_df, trucks_df, distance_matrix)
+                self.optimizer.set_objective_weights(cost_weight, distance_weight)
+                self._log(f"Objective weights: cost={cost_weight:.2f}, distance={distance_weight:.2f}")
+            else:
+                self._log("Initializing standard optimization engine...")
+                self.optimizer = VrpOptimizer(orders_df, trucks_df, distance_matrix)
             
             # Build model
             self._log("Building MILP optimization model...")
@@ -66,7 +77,10 @@ class OptimizationRunner:
             
             # Solve optimization
             self._log("Executing optimization solver...")
-            success = self.optimizer.solve()
+            if use_enhanced_model:
+                success = self.optimizer.solve(timeout=solver_timeout)
+            else:
+                success = self.optimizer.solve()
             
             if not success:
                 self._log("ERROR: Optimization failed - no solution found")
@@ -78,6 +92,13 @@ class OptimizationRunner:
             
             self.solve_time = time.time() - start_time
             self._log(f"Optimization completed in {self.solve_time:.2f} seconds")
+            
+            # Log enhanced solution metrics
+            if use_enhanced_model and 'costs' in self.solution:
+                if 'total_distance' in self.solution['costs']:
+                    total_distance = self.solution['costs']['total_distance']
+                    self._log(f"Total distance: {total_distance:.1f} km")
+                    self._log(f"Total truck cost: €{self.solution['costs']['total_truck_cost']:.0f}")
             
             # Validate solution if enabled
             if enable_validation:

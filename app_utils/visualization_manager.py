@@ -216,15 +216,36 @@ class VisualizationManager:
 
     
     def create_route_visualization(self, routes_df: pd.DataFrame, orders_df: pd.DataFrame, trucks_df: pd.DataFrame):
-        """Create a route visualization plot"""
+        """Create an enhanced route visualization plot with actual route sequences"""
         fig = go.Figure()
         
-        # Convert postal codes to coordinates
+        # Convert postal codes to coordinates for visualization
         postal_coords = {}
-        for _, order in orders_df.iterrows():
-            postal_code = order['postal_code']
-            coord_x = int(postal_code) - int(orders_df['postal_code'].min())
+        unique_postal_codes = list(set(orders_df['postal_code'].tolist()))
+        
+        # Create a more spread out coordinate system
+        for i, postal_code in enumerate(sorted(unique_postal_codes)):
+            # Use actual postal code differences for x-coordinates
+            coord_x = int(postal_code) - int(min(unique_postal_codes))
             postal_coords[postal_code] = coord_x
+        
+        # Add depot location if available (assume it's the first postal code or a separate location)
+        depot_location = min(unique_postal_codes)  # Use minimum postal code as depot
+        if depot_location not in postal_coords:
+            postal_coords[depot_location] = 0
+        
+        # Plot depot
+        depot_x = postal_coords[depot_location]
+        fig.add_trace(go.Scatter(
+            x=[depot_x],
+            y=[0],
+            mode='markers+text',
+            marker=dict(size=20, color='red', symbol='square', line=dict(width=3, color='darkred')),
+            text=f"Depot<br>{depot_location}",
+            textposition="bottom center",
+            name="Depot",
+            showlegend=True
+        ))
         
         # Plot order locations
         for _, order in orders_df.iterrows():
@@ -235,54 +256,121 @@ class VisualizationManager:
                 x=[x_coord],
                 y=[0],
                 mode='markers+text',
-                marker=dict(size=max(10, order['volume']), color='lightblue', line=dict(width=2, color='navy')),
+                marker=dict(size=max(12, order['volume']/2), color='lightblue', line=dict(width=2, color='navy')),
                 text=f"Order {order['order_id']}<br>{order['volume']}m³",
                 textposition="top center",
                 name=f"Order {order['order_id']}",
                 showlegend=False
             ))
         
-        # Plot truck routes
+        # Plot truck routes with enhanced visualization
         colors = px.colors.qualitative.Set1
         for idx, (_, route) in enumerate(routes_df.iterrows()):
             truck_id = route['truck_id']
             assigned_orders = route['assigned_orders']
             
-            if len(assigned_orders) >= 1:  # Show trucks with 1 or more orders
-                # Get coordinates for route
-                route_coords = []
-                for order_id in assigned_orders:
-                    order_postal = orders_df[orders_df['order_id'] == order_id]['postal_code'].iloc[0]
-                    route_coords.append(postal_coords[order_postal])
-                
-                # Plot route line (or single point for single orders)
-                if len(route_coords) > 1:
-                    # Multiple orders - show as connected route
-                    fig.add_trace(go.Scatter(
-                        x=route_coords,
-                        y=[0] * len(route_coords),
-                        mode='lines+markers',
-                        line=dict(width=3, color=colors[idx % len(colors)]),
-                        marker=dict(size=8),
-                        name=f'Truck {truck_id}',
-                        showlegend=True
-                    ))
+            if len(assigned_orders) >= 1:
+                # Check if route_sequence is available (enhanced model)
+                if 'route_sequence' in route and route['route_sequence'] is not None:
+                    # Enhanced model with actual route sequence
+                    route_sequence = route['route_sequence']
+                    route_distance = route.get('route_distance', 0)
+                    
+                    # Plot the actual route sequence
+                    route_x_coords = []
+                    route_labels = []
+                    
+                    for location in route_sequence:
+                        if location in postal_coords:
+                            route_x_coords.append(postal_coords[location])
+                            if location == depot_location:
+                                route_labels.append("Depot")
+                            else:
+                                # Find orders at this location
+                                orders_at_location = [o for o in assigned_orders 
+                                                    if orders_df[orders_df['order_id'] == o]['postal_code'].iloc[0] == location]
+                                if orders_at_location:
+                                    route_labels.append(f"{', '.join(orders_at_location)}")
+                                else:
+                                    route_labels.append(location)
+                    
+                    if len(route_x_coords) > 1:
+                        # Plot route with arrows showing direction
+                        fig.add_trace(go.Scatter(
+                            x=route_x_coords,
+                            y=[0.1] * len(route_x_coords),  # Slightly offset for visibility
+                            mode='lines+markers',
+                            line=dict(width=4, color=colors[idx % len(colors)]),
+                            marker=dict(size=10, color=colors[idx % len(colors)]),
+                            name=f'Truck {truck_id} ({route_distance:.1f}km)',
+                            showlegend=True,
+                            hovertemplate=f'<b>Truck {truck_id}</b><br>' +
+                                        f'Route Distance: {route_distance:.1f} km<br>' +
+                                        f'Orders: {", ".join(assigned_orders)}<br>' +
+                                        '<extra></extra>'
+                        ))
+                        
+                        # Add arrows to show direction
+                        for i in range(len(route_x_coords) - 1):
+                            mid_x = (route_x_coords[i] + route_x_coords[i + 1]) / 2
+                            fig.add_annotation(
+                                x=mid_x,
+                                y=0.1,
+                                ax=route_x_coords[i],
+                                ay=0.1,
+                                axref='x',
+                                ayref='y',
+                                arrowhead=2,
+                                arrowsize=1,
+                                arrowwidth=2,
+                                arrowcolor=colors[idx % len(colors)],
+                                showarrow=True
+                            )
+                    else:
+                        # Single location
+                        fig.add_trace(go.Scatter(
+                            x=route_x_coords,
+                            y=[0.1],
+                            mode='markers',
+                            marker=dict(size=15, color=colors[idx % len(colors)], symbol='diamond'),
+                            name=f'Truck {truck_id}',
+                            showlegend=True
+                        ))
                 else:
-                    # Single order - show as single marker
-                    fig.add_trace(go.Scatter(
-                        x=route_coords,
-                        y=[0] * len(route_coords),
-                        mode='markers',
-                        marker=dict(size=12, color=colors[idx % len(colors)], symbol='diamond'),
-                        name=f'Truck {truck_id}',
-                        showlegend=True
-                    ))
+                    # Standard model - simple visualization
+                    route_coords = []
+                    for order_id in assigned_orders:
+                        order_postal = orders_df[orders_df['order_id'] == order_id]['postal_code'].iloc[0]
+                        route_coords.append(postal_coords[order_postal])
+                    
+                    if len(route_coords) > 1:
+                        # Multiple orders - show as connected route
+                        fig.add_trace(go.Scatter(
+                            x=route_coords,
+                            y=[0] * len(route_coords),
+                            mode='lines+markers',
+                            line=dict(width=3, color=colors[idx % len(colors)]),
+                            marker=dict(size=8),
+                            name=f'Truck {truck_id}',
+                            showlegend=True
+                        ))
+                    else:
+                        # Single order - show as single marker
+                        fig.add_trace(go.Scatter(
+                            x=route_coords,
+                            y=[0] * len(route_coords),
+                            mode='markers',
+                            marker=dict(size=12, color=colors[idx % len(colors)], symbol='diamond'),
+                            name=f'Truck {truck_id}',
+                            showlegend=True
+                        ))
         
         fig.update_layout(
             title='Delivery Routes Visualization',
             xaxis_title='Postal Code Distance (km)',
-            yaxis=dict(showticklabels=False, showgrid=False),
-            height=400
+            yaxis=dict(showticklabels=False, showgrid=False, range=[-0.5, 0.5]),
+            height=500,
+            hovermode='closest'
         )
         
         return fig

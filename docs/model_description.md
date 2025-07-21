@@ -4,14 +4,27 @@ This document provides a comprehensive description of the Mixed Integer Linear P
 
 ## Problem Definition
 
-The Vehicle Router solves a variant of the Capacitated Vehicle Routing Problem (CVRP) where the objective is to assign orders to trucks and determine optimal routes while minimizing total operational costs.
+The Vehicle Router solves the Capacitated Vehicle Routing Problem (CVRP) with two distinct optimization approaches:
+
+### Standard Model
+- **Objective**: Minimize total truck operational costs
+- **Focus**: Optimal truck selection and order assignment
+- **Complexity**: Simplified model suitable for cost-focused optimization
+
+### Enhanced Model (NEW)
+- **Objective**: Minimize weighted combination of truck costs and travel distances
+- **Focus**: Comprehensive route optimization with distance minimization
+- **Features**: Multi-objective optimization, route sequencing, depot constraints
+- **Complexity**: Advanced model with routing variables and subtour elimination
 
 ### Problem Characteristics
 
 - **Orders**: Each order has a specific volume requirement and delivery location
 - **Trucks**: Each truck has a maximum capacity and associated operational cost
-- **Objective**: Minimize total cost while satisfying all constraints
-- **Constraints**: Capacity limits, order assignment requirements, truck usage logic
+- **Distance Matrix**: Travel distances between all postal code locations
+- **Depot**: Central location where trucks start and end their routes
+- **Objectives**: Minimize costs and/or travel distances while satisfying all constraints
+- **Constraints**: Capacity limits, order assignment requirements, route continuity, depot constraints
 
 ## Mathematical Formulation
 
@@ -35,41 +48,64 @@ The Vehicle Router solves a variant of the Capacitated Vehicle Routing Problem (
 
 ### Decision Variables
 
-The MILP formulation uses two types of binary decision variables:
+#### Standard Model
+The standard MILP formulation uses two types of binary decision variables:
 
-#### Order Assignment Variables
+**Order Assignment Variables:**
 ```
 x_{i,j} ∈ {0, 1}  ∀i ∈ I, ∀j ∈ J
 ```
 - `x_{i,j} = 1` if order `i` is assigned to truck `j`
 - `x_{i,j} = 0` otherwise
 
-#### Truck Usage Variables
+**Truck Usage Variables:**
 ```
 y_j ∈ {0, 1}  ∀j ∈ J
 ```
 - `y_j = 1` if truck `j` is used in the solution
 - `y_j = 0` otherwise
 
+#### Enhanced Model
+The enhanced MILP formulation includes additional routing variables:
+
+**Routing Variables:**
+```
+z_{j,k,l} ∈ {0, 1}  ∀j ∈ J, ∀k,l ∈ K, k ≠ l
+```
+- `z_{j,k,l} = 1` if truck `j` travels directly from location `k` to location `l`
+- `z_{j,k,l} = 0` otherwise
+
 ### Objective Function
 
-The objective is to minimize the total operational cost:
+#### Standard Model
+The standard model minimizes total truck operational costs:
 
 ```
 minimize: ∑_{j ∈ J} c_j × y_j
 ```
 
-This formulation focuses on truck selection costs. The model can be extended to include distance-based costs:
+This formulation focuses on truck selection costs and is suitable when fixed costs dominate.
+
+#### Enhanced Model
+The enhanced model minimizes a weighted combination of truck costs and travel distances:
 
 ```
-minimize: ∑_{j ∈ J} c_j × y_j + ∑_{j ∈ J} ∑_{k ∈ K} ∑_{l ∈ K} d_{k,l} × z_{j,k,l}
+minimize: α × (∑_{j ∈ J} c_j × y_j) + β × (∑_{j ∈ J} ∑_{k ∈ K} ∑_{l ∈ K} d_{k,l} × z_{j,k,l})
 ```
 
-where `z_{j,k,l}` are additional binary variables indicating if truck `j` travels from location `k` to location `l`.
+Where:
+- `α` = cost weight (typically 0.6)
+- `β` = distance weight (typically 0.4)
+- `α + β = 1` for proper scaling
+- `z_{j,k,l}` = routing variables indicating truck `j` travels from location `k` to `l`
+
+This multi-objective approach balances cost efficiency with route optimization.
 
 ### Constraints
 
-#### 1. Order Assignment Constraints
+#### Standard Model Constraints
+
+**1. Order Assignment Constraints**
 Each order must be assigned to exactly one truck:
 
 ```
@@ -78,7 +114,7 @@ Each order must be assigned to exactly one truck:
 
 **Interpretation**: Every order is delivered exactly once.
 
-#### 2. Capacity Constraints
+**2. Capacity Constraints**
 The total volume of orders assigned to each truck cannot exceed its capacity:
 
 ```
@@ -87,7 +123,7 @@ The total volume of orders assigned to each truck cannot exceed its capacity:
 
 **Interpretation**: No truck exceeds its capacity limit.
 
-#### 3. Truck Usage Constraints
+**3. Truck Usage Constraints**
 If any order is assigned to a truck, the truck must be marked as used:
 
 ```
@@ -95,6 +131,27 @@ y_j ≥ x_{i,j}  ∀i ∈ I, ∀j ∈ J
 ```
 
 **Interpretation**: Truck usage variables are properly linked to order assignments.
+
+#### Enhanced Model Additional Constraints
+
+**4. Route Continuity Constraints**
+For each truck and location, flow conservation must be maintained:
+
+```
+∑_{l ∈ K, l ≠ k} z_{j,l,k} = ∑_{l ∈ K, l ≠ k} z_{j,k,l} = ∑_{i ∈ I: loc_i = k} x_{i,j}  ∀j ∈ J, ∀k ∈ K
+```
+
+**Interpretation**: If a truck visits a location, it must arrive and depart, serving all assigned orders.
+
+**5. Depot Constraints**
+Each used truck must start and end at the depot:
+
+```
+∑_{k ∈ K, k ≠ depot} z_{j,depot,k} = y_j  ∀j ∈ J
+∑_{k ∈ K, k ≠ depot} z_{j,k,depot} = y_j  ∀j ∈ J
+```
+
+**Interpretation**: Used trucks leave and return to the depot exactly once.
 
 ### Complete MILP Formulation
 
