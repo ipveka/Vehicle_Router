@@ -27,83 +27,193 @@ class VisualizationManager:
         self.color_palette = px.colors.qualitative.Set1
     
     def create_orders_volume_chart(self, orders_df: pd.DataFrame):
-        """Create a bar chart showing order volumes"""
-        fig = px.bar(
-            orders_df, 
-            x='order_id', 
-            y='volume',
-            title='Order Volumes',
-            labels={'volume': 'Volume (m³)', 'order_id': 'Order ID'},
-            color='volume',
-            color_continuous_scale='Blues'
+        """Create a vertical bar chart showing order volumes"""
+        if orders_df.empty:
+            fig = go.Figure()
+            fig.add_annotation(text="No order data available", x=0.5, y=0.5, showarrow=False)
+            return fig
+        
+        # Create vertical bar chart
+        fig = go.Figure()
+        
+        fig.add_trace(go.Bar(
+            x=orders_df['order_id'].tolist(),
+            y=orders_df['volume'].tolist(),
+            text=[f"{vol:.0f}" for vol in orders_df['volume']],
+            textposition='outside',
+            marker_color='cornflowerblue',
+            name='Volume'
+        ))
+        
+        fig.update_layout(
+            title='Order Volumes (m³)',
+            xaxis_title='Order ID',
+            yaxis_title='Volume (m³)',
+            showlegend=False,
+            height=400,
+            yaxis=dict(range=[0, orders_df['volume'].max() * 1.15])
         )
-        fig.update_layout(showlegend=False)
+        
         return fig
     
-    def create_orders_location_chart(self, orders_df: pd.DataFrame):
-        """Create a scatter plot showing order locations"""
-        # Convert postal codes to numeric for plotting
-        orders_df_plot = orders_df.copy()
-        orders_df_plot['postal_numeric'] = orders_df_plot['postal_code'].astype(str).str.extract('(\d+)').astype(int)
+    def create_orders_distribution_chart(self, orders_df: pd.DataFrame):
+        """Create a pie chart showing order volume percentage distribution"""
+        if orders_df.empty:
+            fig = go.Figure()
+            fig.add_annotation(text="No order data available", x=0.5, y=0.5, showarrow=False)
+            return fig
         
-        fig = px.scatter(
-            orders_df_plot,
-            x='postal_numeric',
-            y=[1] * len(orders_df_plot),  # All on same y-level
-            size='volume',
-            hover_data=['order_id', 'volume', 'postal_code'],
-            title='Order Locations',
-            labels={'postal_numeric': 'Postal Code', 'y': ''},
-            size_max=30
-        )
+        # Calculate percentage distribution
+        total_volume = orders_df['volume'].sum()
+        percentages = (orders_df['volume'] / total_volume * 100).round(1)
+        
+        # Create pie chart
+        fig = go.Figure(data=[go.Pie(
+            labels=orders_df['order_id'].tolist(),
+            values=orders_df['volume'].tolist(),
+            textinfo='label+percent',
+            textposition='auto',
+            hovertemplate='<b>%{label}</b><br>' +
+                         'Volume: %{value:.1f} m³<br>' +
+                         'Percentage: %{percent}<br>' +
+                         '<extra></extra>',
+            marker=dict(
+                colors=px.colors.qualitative.Set3,
+                line=dict(color='#000000', width=1)
+            )
+        )])
+        
         fig.update_layout(
-            yaxis=dict(showticklabels=False, showgrid=False),
-            showlegend=False
+            title='Order Volume Distribution',
+            height=400,
+            showlegend=True,
+            legend=dict(
+                orientation="v",
+                yanchor="middle",
+                y=0.5,
+                xanchor="left",
+                x=1.01
+            )
         )
+        
         return fig
     
     def create_trucks_capacity_chart(self, trucks_df: pd.DataFrame):
-        """Create a bar chart showing truck capacities"""
-        fig = px.bar(
-            trucks_df,
-            x='truck_id',
-            y='capacity',
-            title='Truck Capacities',
-            labels={'capacity': 'Capacity (m³)', 'truck_id': 'Truck ID'},
-            color='capacity',
-            color_continuous_scale='Greens'
+        """Create a vertical bar chart showing truck capacities"""
+        if trucks_df.empty:
+            fig = go.Figure()
+            fig.add_annotation(text="No truck data available", x=0.5, y=0.5, showarrow=False)
+            return fig
+        
+        # Create vertical bar chart
+        fig = go.Figure()
+        
+        fig.add_trace(go.Bar(
+            x=trucks_df['truck_id'].astype(str).tolist(),
+            y=trucks_df['capacity'].tolist(),
+            text=[f"{cap:.0f}" for cap in trucks_df['capacity']],
+            textposition='outside',
+            marker_color='cornflowerblue',
+            name='Capacity'
+        ))
+        
+        fig.update_layout(
+            title='Truck Capacities (m³)',
+            xaxis_title='Truck ID',
+            yaxis_title='Capacity (m³)',
+            showlegend=False,
+            height=400,
+            yaxis=dict(range=[0, trucks_df['capacity'].max() * 1.15])
         )
-        fig.update_layout(showlegend=False)
+        
         return fig
     
     def create_trucks_cost_efficiency_chart(self, trucks_df: pd.DataFrame):
-        """Create a scatter plot showing cost vs capacity efficiency"""
-        trucks_df_plot = trucks_df.copy()
-        trucks_df_plot['cost_per_m3'] = trucks_df_plot['cost'] / trucks_df_plot['capacity']
+        """Create a vertical bar chart showing cost vs capacity"""
+        if trucks_df.empty:
+            fig = go.Figure()
+            fig.add_annotation(text="No truck data available", x=0.5, y=0.5, showarrow=False)
+            return fig
         
-        fig = px.scatter(
-            trucks_df_plot,
-            x='capacity',
-            y='cost',
-            size='cost_per_m3',
-            hover_data=['truck_id', 'cost_per_m3'],
-            title='Truck Cost vs Capacity',
-            labels={'capacity': 'Capacity (m³)', 'cost': 'Cost (€)'},
-            size_max=20
+        # Create vertical bar chart showing cost
+        fig = go.Figure()
+        
+        fig.add_trace(go.Bar(
+            x=trucks_df['truck_id'].astype(str).tolist(),
+            y=trucks_df['cost'].tolist(),
+            text=[f"€{cost:.0f}" for cost in trucks_df['cost']],
+            textposition='outside',
+            marker_color='cornflowerblue',
+            name='Cost'
+        ))
+        
+        fig.update_layout(
+            title='Truck Costs (€)',
+            xaxis_title='Truck ID',
+            yaxis_title='Cost (€)',
+            showlegend=False,
+            height=400,
+            yaxis=dict(range=[0, trucks_df['cost'].max() * 1.15])
         )
+        
         return fig
     
     def create_distance_heatmap(self, distance_matrix: pd.DataFrame):
         """Create a heatmap of the distance matrix"""
-        fig = px.imshow(
-            distance_matrix.values,
-            x=distance_matrix.columns,
-            y=distance_matrix.index,
-            title='Distance Matrix Heatmap',
-            labels={'x': 'To Postal Code', 'y': 'From Postal Code', 'color': 'Distance (km)'},
-            color_continuous_scale='Viridis'
-        )
-        return fig
+        if distance_matrix.empty:
+            fig = go.Figure()
+            fig.add_annotation(text="No distance data available", x=0.5, y=0.5, showarrow=False)
+            return fig
+        
+        try:
+            # Convert to numpy array and ensure it's numeric
+            z_values = distance_matrix.values.astype(float)
+            
+            # Create text annotations for each cell
+            text_values = []
+            for i in range(len(distance_matrix.index)):
+                row_text = []
+                for j in range(len(distance_matrix.columns)):
+                    value = z_values[i, j]
+                    if value == 0:
+                        row_text.append("0")
+                    else:
+                        row_text.append(f"{value:.1f}")
+                text_values.append(row_text)
+            
+            # Create heatmap
+            fig = go.Figure(data=go.Heatmap(
+                z=z_values,
+                x=list(distance_matrix.columns),
+                y=list(distance_matrix.index),
+                colorscale='RdYlBu_r',  # Red-Yellow-Blue reversed (red for high distances)
+                text=text_values,
+                texttemplate="%{text}km",
+                textfont={"size": 12, "color": "black"},
+                hoverongaps=False,
+                colorbar=dict(title="Distance (km)", titleside="right"),
+                showscale=True
+            ))
+            
+            fig.update_layout(
+                title='Distance Matrix Between Postal Codes',
+                xaxis_title='To Postal Code',
+                yaxis_title='From Postal Code',
+                width=600,
+                height=500,
+                xaxis=dict(side='bottom'),
+                yaxis=dict(autorange='reversed')  # Reverse y-axis to match matrix convention
+            )
+            
+            return fig
+            
+        except Exception as e:
+            # Fallback in case of any errors
+            fig = go.Figure()
+            fig.add_annotation(text=f"Error creating heatmap: {str(e)}", x=0.5, y=0.5, showarrow=False)
+            return fig
+    
+
     
     def create_route_visualization(self, routes_df: pd.DataFrame, orders_df: pd.DataFrame, trucks_df: pd.DataFrame):
         """Create a route visualization plot"""
@@ -138,23 +248,35 @@ class VisualizationManager:
             truck_id = route['truck_id']
             assigned_orders = route['assigned_orders']
             
-            if len(assigned_orders) > 1:
+            if len(assigned_orders) >= 1:  # Show trucks with 1 or more orders
                 # Get coordinates for route
                 route_coords = []
                 for order_id in assigned_orders:
                     order_postal = orders_df[orders_df['order_id'] == order_id]['postal_code'].iloc[0]
                     route_coords.append(postal_coords[order_postal])
                 
-                # Plot route line
-                fig.add_trace(go.Scatter(
-                    x=route_coords,
-                    y=[0] * len(route_coords),
-                    mode='lines+markers',
-                    line=dict(width=3, color=colors[idx % len(colors)]),
-                    marker=dict(size=8),
-                    name=f'Truck {truck_id}',
-                    showlegend=True
-                ))
+                # Plot route line (or single point for single orders)
+                if len(route_coords) > 1:
+                    # Multiple orders - show as connected route
+                    fig.add_trace(go.Scatter(
+                        x=route_coords,
+                        y=[0] * len(route_coords),
+                        mode='lines+markers',
+                        line=dict(width=3, color=colors[idx % len(colors)]),
+                        marker=dict(size=8),
+                        name=f'Truck {truck_id}',
+                        showlegend=True
+                    ))
+                else:
+                    # Single order - show as single marker
+                    fig.add_trace(go.Scatter(
+                        x=route_coords,
+                        y=[0] * len(route_coords),
+                        mode='markers',
+                        marker=dict(size=12, color=colors[idx % len(colors)], symbol='diamond'),
+                        name=f'Truck {truck_id}',
+                        showlegend=True
+                    ))
         
         fig.update_layout(
             title='Delivery Routes Visualization',
@@ -178,13 +300,25 @@ class VisualizationManager:
         truck_ids = list(truck_costs.keys())
         cost_values = list(truck_costs.values())
         
-        fig = px.bar(
-            x=truck_ids,
+        # Create blue bar chart with values on top
+        fig = go.Figure()
+        
+        fig.add_trace(go.Bar(
+            x=[str(tid) for tid in truck_ids],
             y=cost_values,
+            text=[f"€{cost:.0f}" for cost in cost_values],
+            textposition='outside',
+            marker_color='cornflowerblue',
+            name='Cost'
+        ))
+        
+        fig.update_layout(
             title='Cost Breakdown by Truck',
-            labels={'x': 'Truck ID', 'y': 'Cost (€)'},
-            color=cost_values,
-            color_continuous_scale='Reds'
+            xaxis_title='Truck ID',
+            yaxis_title='Cost (€)',
+            showlegend=False,
+            height=400,
+            yaxis=dict(range=[0, max(cost_values) * 1.15])
         )
         
         # Add total cost annotation
@@ -247,17 +381,14 @@ class VisualizationManager:
         used_volumes = [utilization[tid]['used_volume'] for tid in truck_ids]
         capacities = [utilization[tid]['capacity'] for tid in truck_ids]
         
-        # Create horizontal bar chart
+        # Create horizontal bar chart with blue bars
         fig = go.Figure()
-        
-        # Add utilization bars
-        colors = ['green' if u >= 75 else 'orange' if u >= 50 else 'red' for u in utilization_pct]
         
         fig.add_trace(go.Bar(
             y=[f'Truck {tid}' for tid in truck_ids],
             x=utilization_pct,
             orientation='h',
-            marker_color=colors,
+            marker_color='cornflowerblue',
             text=[f'{u:.1f}%' for u in utilization_pct],
             textposition='inside',
             name='Utilization'
@@ -267,13 +398,42 @@ class VisualizationManager:
             title='Truck Capacity Utilization',
             xaxis_title='Utilization (%)',
             yaxis_title='Truck ID',
-            showlegend=False
+            showlegend=False,
+            height=400
         )
         
-        # Add reference lines
-        fig.add_vline(x=50, line_dash="dash", line_color="red", opacity=0.7)
-        fig.add_vline(x=75, line_dash="dash", line_color="orange", opacity=0.7)
-        fig.add_vline(x=90, line_dash="dash", line_color="green", opacity=0.7)
+        return fig
+    
+    def create_volume_usage_chart(self, utilization: Dict[int, Dict[str, Any]], trucks_df: pd.DataFrame):
+        """Create a volume usage breakdown chart"""
+        if not utilization:
+            fig = go.Figure()
+            fig.add_annotation(text="No utilization data available", x=0.5, y=0.5, showarrow=False)
+            return fig
+        
+        truck_ids = list(utilization.keys())
+        used_volumes = [utilization[tid]['used_volume'] for tid in truck_ids]
+        
+        # Create vertical bar chart with blue bars and values on top
+        fig = go.Figure()
+        
+        fig.add_trace(go.Bar(
+            x=[f'Truck {tid}' for tid in truck_ids],
+            y=used_volumes,
+            text=[f"{vol:.1f} m³" for vol in used_volumes],
+            textposition='outside',
+            marker_color='cornflowerblue',
+            name='Volume Used'
+        ))
+        
+        fig.update_layout(
+            title='Volume Usage Breakdown by Truck',
+            xaxis_title='Truck ID',
+            yaxis_title='Volume Used (m³)',
+            showlegend=False,
+            height=400,
+            yaxis=dict(range=[0, max(used_volumes) * 1.15] if used_volumes else [0, 1])
+        )
         
         return fig
     
