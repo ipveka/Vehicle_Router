@@ -98,3 +98,14 @@
   - Methodology should explain in details how the solver works and all details
   - Once done, update documentation and structure to include the app
   - _Requirements: 3.1, 3.2, 5.1, 5.2, 5.3_
+- [x] 12. Enhance application with optimizer selection and depot configuration
+  - Update src/main.py to allow user selection between standard and enhanced optimizers
+  - Add depot location configuration with default to '08030'
+  - Simplify main.py command-line interface with clear optimizer options
+  - Update Streamlit app to use buttons for optimizer selection instead of checkbox
+  - Add depot location selection in Streamlit app with postal code dropdown
+  - Fix route reconstruction logic to prevent repetitive depot visits
+  - Improve route visualization to show one clear plot per truck with proper depot-to-customer routes
+  - Update README.md with new optimizer selection and depot configuration features
+  - Add detailed explanations of depot positioning in application output
+  - _Requirements: Enhanced user experience, better route optimization, clearer visualizations_

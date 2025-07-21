@@ -67,7 +67,8 @@ class EnhancedVrpOptimizer:
     """
     
     def __init__(self, orders_df: pd.DataFrame, trucks_df: pd.DataFrame, 
-                 distance_matrix: pd.DataFrame, depot_location: Optional[str] = None):
+                 distance_matrix: pd.DataFrame, depot_location: Optional[str] = None,
+                 depot_return: bool = True):
         """
         Initialize the Enhanced VRP Optimizer with problem data
         
@@ -76,6 +77,7 @@ class EnhancedVrpOptimizer:
             trucks_df (pd.DataFrame): Trucks data with columns [truck_id, capacity, cost]
             distance_matrix (pd.DataFrame): Distance matrix between postal codes
             depot_location (Optional[str]): Depot postal code. If None, uses first postal code.
+            depot_return (bool): Whether trucks must return to depot after deliveries. Default True.
             
         Raises:
             ValueError: If input data is invalid or inconsistent
@@ -93,9 +95,21 @@ class EnhancedVrpOptimizer:
         
         # Set depot location (trucks start and end here)
         if depot_location is None:
-            self.depot_location = self.orders_df['postal_code'].iloc[0]
+            # Default to '08020' if it exists in the distance matrix
+            if '08020' in self.distance_matrix.index:
+                self.depot_location = '08020'
+                logger.info(f"Using default depot location: {self.depot_location}")
+            else:
+                # Fall back to first postal code
+                self.depot_location = self.orders_df['postal_code'].iloc[0]
+                logger.info(f"Default depot '08020' not found, using first postal code: {self.depot_location}")
         else:
-            self.depot_location = depot_location
+            # Verify the provided depot location exists in distance matrix
+            if depot_location in self.distance_matrix.index:
+                self.depot_location = depot_location
+                logger.info(f"Using specified depot location: {self.depot_location}")
+            else:
+                raise ValueError(f"Specified depot location '{depot_location}' not found in distance matrix")
             
         # Initialize optimization components
         self.model = None
@@ -106,6 +120,10 @@ class EnhancedVrpOptimizer:
         # Default objective weights (can be modified with set_objective_weights)
         self.cost_weight = 0.6  # Weight for truck costs
         self.distance_weight = 0.4  # Weight for distance costs
+        
+        # Depot return option
+        self.depot_return = depot_return
+        logger.info(f"Depot return enabled: {self.depot_return}")
         
         # Extract problem dimensions
         self.orders = self.orders_df['order_id'].tolist()
@@ -474,11 +492,12 @@ class EnhancedVrpOptimizer:
     
     def _add_depot_constraints(self) -> None:
         """
-        Add depot constraints ensuring trucks start and end at depot
+        Add depot constraints ensuring trucks start at depot and optionally return
         
-        Each used truck must leave the depot exactly once and return exactly once.
+        Each used truck must leave the depot exactly once.
+        If depot_return is True, trucks must also return to depot exactly once.
         """
-        logger.info("Adding depot constraints...")
+        logger.info(f"Adding depot constraints (depot_return={self.depot_return})...")
         
         constraint_count = 0
         for truck_id in self.trucks:
@@ -489,23 +508,25 @@ class EnhancedVrpOptimizer:
                 if other_loc != self.depot_location and (self.depot_location, other_loc, truck_id) in self.decision_vars['z']
             ])
             
-            # Truck returns to depot
-            depot_inflow = pulp.lpSum([
-                self.decision_vars['z'][(other_loc, self.depot_location, truck_id)]
-                for other_loc in self.locations
-                if other_loc != self.depot_location and (other_loc, self.depot_location, truck_id) in self.decision_vars['z']
-            ])
-            
-            # If truck is used, it must leave and return to depot exactly once
+            # If truck is used, it must leave depot exactly once
             truck_usage_var = self.decision_vars['y'][truck_id]
             
             constraint_name = f"depot_outflow_truck_{truck_id}"
             self.model += depot_outflow == truck_usage_var, constraint_name
+            constraint_count += 1
             
-            constraint_name = f"depot_inflow_truck_{truck_id}"
-            self.model += depot_inflow == truck_usage_var, constraint_name
-            
-            constraint_count += 2
+            # Add return constraint only if depot_return is enabled
+            if self.depot_return:
+                # Truck returns to depot
+                depot_inflow = pulp.lpSum([
+                    self.decision_vars['z'][(other_loc, self.depot_location, truck_id)]
+                    for other_loc in self.locations
+                    if other_loc != self.depot_location and (other_loc, self.depot_location, truck_id) in self.decision_vars['z']
+                ])
+                
+                constraint_name = f"depot_inflow_truck_{truck_id}"
+                self.model += depot_inflow == truck_usage_var, constraint_name
+                constraint_count += 1
         
         logger.info(f"Added {constraint_count} depot constraints")
     
@@ -654,11 +675,20 @@ class EnhancedVrpOptimizer:
         
         # Log solution summary
         logger.info("Enhanced solution extraction completed:")
+        logger.info(f"  Depot location: {self.depot_location}")
         logger.info(f"  Selected trucks: {selected_trucks}")
         logger.info(f"  Total truck cost: €{total_truck_cost:.0f}")
         logger.info(f"  Total distance: {total_distance:.1f} km")
         logger.info(f"  Objective value: {objective_value:.6f}")
         logger.info(f"  Orders delivered: {len(assignments)}/{len(self.orders)}")
+        
+        # Log detailed route information
+        for truck_id in selected_trucks:
+            if truck_id in routes:
+                route_segments = routes[truck_id]
+                logger.info(f"  Truck {truck_id} route segments: {route_segments}")
+            assigned_orders = [a['order_id'] for a in assignments if a['truck_id'] == truck_id]
+            logger.info(f"  Truck {truck_id} assigned orders: {assigned_orders}")
     
     def get_solution(self) -> Dict[str, Any]:
         """
@@ -693,7 +723,8 @@ class EnhancedVrpOptimizer:
                 'assigned_orders': assigned_orders,
                 'route_sequence': route_sequence,
                 'route_distance': route_distance,
-                'num_orders': len(assigned_orders)
+                'num_orders': len(assigned_orders),
+                'depot_location': self.depot_location
             })
         
         routes_df = pd.DataFrame(routes_data)
@@ -739,46 +770,134 @@ class EnhancedVrpOptimizer:
         if truck_id not in self.solution_data['routes']:
             return [self.depot_location]
         
-        # Build adjacency list from route segments
-        route_segments = self.solution_data['routes'][truck_id]
-        adjacency = {}
+        # Get assigned orders for this truck
+        assigned_orders = [a['order_id'] for a in self.solution_data['assignments'] if a['truck_id'] == truck_id]
+        if not assigned_orders:
+            return [self.depot_location]
+            
+        # Get postal codes for assigned orders
+        order_locations = {}
+        for order_id in assigned_orders:
+            order_row = self.orders_df[self.orders_df['order_id'] == order_id].iloc[0]
+            postal_code = order_row['postal_code']
+            if postal_code not in order_locations:
+                order_locations[postal_code] = []
+            order_locations[postal_code].append(order_id)
         
+        # If only one location (besides depot), create simple out-and-back route
+        if len(order_locations) == 1:
+            location = list(order_locations.keys())[0]
+            return [self.depot_location, location, self.depot_location]
+        
+        # For multiple locations, use the route segments to reconstruct the sequence
+        route_segments = self.solution_data['routes'][truck_id]
+        
+        # Build adjacency list from route segments
+        adjacency = {}
         for loc1, loc2 in route_segments:
             if loc1 not in adjacency:
-                adjacency[loc1] = []
-            adjacency[loc1].append(loc2)
+                adjacency[loc1] = [loc2]
+            else:
+                adjacency[loc1].append(loc2)
         
-        # Reconstruct route starting from depot
+        # Start with depot
         route_sequence = [self.depot_location]
         current_location = self.depot_location
-        visited = set([self.depot_location])
+        visited_locations = set()
         
-        # Follow the route from depot
-        while current_location in adjacency:
-            next_locations = [loc for loc in adjacency[current_location] if loc not in visited or loc == self.depot_location]
-            
-            if not next_locations:
+        # Follow the route until we return to depot or can't proceed
+        while True:
+            if current_location not in adjacency or not adjacency[current_location]:
                 break
                 
-            # Choose the next location (prefer non-depot locations first)
-            next_location = next_locations[0]
-            for loc in next_locations:
-                if loc != self.depot_location:
+            # Choose next location (prefer unvisited customer locations)
+            next_location = None
+            
+            # First priority: unvisited customer locations
+            for loc in adjacency[current_location]:
+                if loc != self.depot_location and loc not in visited_locations:
                     next_location = loc
                     break
             
-            route_sequence.append(next_location)
+            # Second priority: depot if we've visited all customer locations
+            if next_location is None and self.depot_location in adjacency[current_location]:
+                if len(visited_locations) >= len(order_locations):
+                    next_location = self.depot_location
             
-            # If we're back at depot and have visited other locations, we're done
-            if next_location == self.depot_location and len(visited) > 1:
+            # Third priority: any remaining location
+            if next_location is None and adjacency[current_location]:
+                next_location = adjacency[current_location][0]
+            
+            if next_location is None:
                 break
                 
+            route_sequence.append(next_location)
+            
+            # If we're back at depot after visiting locations, we're done
+            if next_location == self.depot_location and visited_locations:
+                break
+                
+            # Mark location as visited
             if next_location != self.depot_location:
-                visited.add(next_location)
+                visited_locations.add(next_location)
+                
+            # Move to next location
             current_location = next_location
             
-            # Prevent infinite loops
-            if len(route_sequence) > len(self.locations) * 2:
+            # Remove this connection to avoid cycles
+            if current_location in adjacency:
+                adjacency[current_location] = [loc for loc in adjacency[current_location] 
+                                             if loc != next_location]
+            
+            # Safety check to prevent infinite loops
+            if len(route_sequence) > len(self.locations) * 3:
+                # If we haven't returned to depot, add it
+                if route_sequence[-1] != self.depot_location:
+                    route_sequence.append(self.depot_location)
                 break
         
+        # Ensure route ends at depot
+        if route_sequence[-1] != self.depot_location:
+            route_sequence.append(self.depot_location)
+            
         return route_sequence
+    
+    def get_solution_summary_text(self) -> str:
+        """
+        Generate console output in the specified format for enhanced optimizer
+        
+        Returns:
+            str: Formatted console output string
+        """
+        if not self.is_solved:
+            return "No solution available"
+        
+        lines = [
+            "=== VEHICLE ROUTER (ENHANCED OPTIMIZER) ===",
+            f"Depot Location: {self.depot_location}",
+            f"Selected Trucks: {self.solution_data['selected_trucks']}"
+        ]
+        
+        # Add truck assignments and routes
+        for truck_id in self.solution_data['selected_trucks']:
+            assigned_orders = [a['order_id'] for a in self.solution_data['assignments'] if a['truck_id'] == truck_id]
+            lines.append(f"Truck {truck_id} -> Orders {assigned_orders}")
+            
+            # Add route information
+            route_sequence = self._reconstruct_route_sequence(truck_id)
+            if len(route_sequence) > 1:
+                route_text = " → ".join(route_sequence)
+                lines.append(f"  Route: {route_text}")
+                
+                # Calculate route distance
+                route_distance = 0
+                for i in range(len(route_sequence) - 1):
+                    route_distance += self.distance_matrix.loc[route_sequence[i], route_sequence[i+1]]
+                lines.append(f"  Distance: {route_distance:.1f} km")
+        
+        lines.extend([
+            f"Total Cost: €{self.solution_data['total_truck_cost']:.0f}",
+            f"Total Distance: {self.solution_data['total_distance']:.1f} km"
+        ])
+        
+        return "\n".join(lines)

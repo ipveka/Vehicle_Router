@@ -40,7 +40,9 @@ class OptimizationRunner:
     def run_optimization(self, orders_df: pd.DataFrame, trucks_df: pd.DataFrame, 
                          distance_matrix: pd.DataFrame, solver_timeout: int = 60,
                          enable_validation: bool = True, use_enhanced_model: bool = True,
-                         cost_weight: float = 0.6, distance_weight: float = 0.4) -> bool:
+                         cost_weight: float = 0.6, distance_weight: float = 0.4,
+                         depot_location: str = '08020', depot_return: bool = None,
+                         enable_greedy_routes: bool = True) -> bool:
         """
         Run the complete optimization process
         
@@ -53,6 +55,9 @@ class OptimizationRunner:
             use_enhanced_model: Whether to use enhanced model with distance optimization
             cost_weight: Weight for truck costs in objective (0-1)
             distance_weight: Weight for distance costs in objective (0-1)
+            depot_location: Depot postal code location
+            depot_return: Whether trucks must return to depot (None = use optimizer default)
+            enable_greedy_routes: Whether to enable greedy route optimization for standard optimizer
             
         Returns:
             bool: True if optimization successful, False otherwise
@@ -64,16 +69,59 @@ class OptimizationRunner:
             # Initialize optimizer
             if use_enhanced_model:
                 self._log("Initializing enhanced optimization engine with distance minimization...")
-                self.optimizer = EnhancedVrpOptimizer(orders_df, trucks_df, distance_matrix)
+                self._log(f"Depot location: {depot_location}")
+                self._log(f"Orders shape: {orders_df.shape}")
+                self._log(f"Trucks shape: {trucks_df.shape}")
+                self._log(f"Distance matrix shape: {distance_matrix.shape}")
+                self._log(f"Distance matrix index: {list(distance_matrix.index)}")
+                
+                # Check if depot is in distance matrix
+                if depot_location not in distance_matrix.index:
+                    self._log(f"WARNING: Depot location {depot_location} not in distance matrix")
+                    # Add depot to distance matrix
+                    from vehicle_router.data_generator import DataGenerator
+                    data_gen = DataGenerator()
+                    postal_codes = list(distance_matrix.index) + [depot_location]
+                    self._log(f"Generating new distance matrix with postal codes: {postal_codes}")
+                    distance_matrix = data_gen.generate_distance_matrix(postal_codes)
+                    self._log(f"Added depot {depot_location} to distance matrix")
+                    self._log(f"New distance matrix shape: {distance_matrix.shape}")
+                
+                # Set depot_return default for enhanced optimizer
+                if depot_return is None:
+                    depot_return = True  # Enhanced optimizer default
+                
+                self._log("Creating EnhancedVrpOptimizer instance...")
+                self._log(f"Depot return: {depot_return}")
+                self.optimizer = EnhancedVrpOptimizer(
+                    orders_df, trucks_df, distance_matrix, 
+                    depot_location=depot_location,
+                    depot_return=depot_return
+                )
+                self._log("EnhancedVrpOptimizer created successfully")
                 self.optimizer.set_objective_weights(cost_weight, distance_weight)
                 self._log(f"Objective weights: cost={cost_weight:.2f}, distance={distance_weight:.2f}")
             else:
+                # Set depot_return default for standard optimizer
+                if depot_return is None:
+                    depot_return = False  # Standard optimizer default
+                
                 self._log("Initializing standard optimization engine...")
-                self.optimizer = VrpOptimizer(orders_df, trucks_df, distance_matrix)
+                self._log(f"Depot location: {depot_location}")
+                self._log(f"Depot return: {depot_return}")
+                self._log(f"Greedy route optimization: {enable_greedy_routes}")
+                
+                self.optimizer = VrpOptimizer(
+                    orders_df, trucks_df, distance_matrix,
+                    depot_location=depot_location,
+                    depot_return=depot_return,
+                    enable_greedy_routes=enable_greedy_routes
+                )
             
             # Build model
             self._log("Building MILP optimization model...")
             self.optimizer.build_model()
+            self._log("Model built successfully")
             
             # Solve optimization
             self._log("Executing optimization solver...")

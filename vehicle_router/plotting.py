@@ -37,20 +37,20 @@ sns.set_palette("husl")
 warnings.filterwarnings('ignore', category=UserWarning, module='matplotlib')
 
 
-def plot_routes(solution_df: pd.DataFrame, orders_df: pd.DataFrame, 
+def plot_routes(routes_df: pd.DataFrame, orders_df: pd.DataFrame, 
                 trucks_df: pd.DataFrame, distance_matrix: pd.DataFrame = None,
                 figsize: Tuple[int, int] = (12, 8), save_path: Optional[str] = None) -> plt.Figure:
     """
-    Visualize delivery routes on a 2D grid showing truck paths and order locations
+    Create individual route plots for each truck with proper route sequences and distance calculation
     
-    Creates a comprehensive route visualization displaying:
-    - Order locations as points with labels and volume information
-    - Truck routes as colored lines connecting assigned orders
-    - Legend showing truck assignments and costs
-    - Grid layout based on postal code coordinates
+    Creates separate subplots for each truck showing:
+    - Depot location as a star marker
+    - Order locations assigned to each truck
+    - Clear route sequences following actual optimization results
+    - Distance and order information with total distance in title
     
     Args:
-        solution_df (pd.DataFrame): Solution data with truck assignments
+        routes_df (pd.DataFrame): Routes data with truck assignments and sequences
         orders_df (pd.DataFrame): Orders data with columns [order_id, volume, postal_code]
         trucks_df (pd.DataFrame): Trucks data with columns [truck_id, capacity, cost]
         distance_matrix (pd.DataFrame, optional): Distance matrix for route optimization
@@ -58,134 +58,159 @@ def plot_routes(solution_df: pd.DataFrame, orders_df: pd.DataFrame,
         save_path (Optional[str]): Path to save the plot image
         
     Returns:
-        plt.Figure: The matplotlib figure object
-        
-    Example:
-        >>> fig = plot_routes(solution['routes_df'], orders_df, trucks_df)
-        >>> plt.show()
+        plt.Figure: The matplotlib figure object with individual truck plots
     """
-    logger.info("Creating route visualization plot...")
+    logger.info("Creating individual truck route visualization plots with proper sequences...")
     
-    # Create figure and axis
-    fig, ax = plt.subplots(figsize=figsize)
+    if routes_df.empty:
+        fig, ax = plt.subplots(figsize=figsize)
+        ax.text(0.5, 0.5, 'No routes to display', ha='center', va='center', 
+               transform=ax.transAxes, fontsize=16)
+        ax.set_title('No Routes Available')
+        return fig
     
-    # Convert postal codes to coordinates (assuming sequential postal codes)
-    # Extract numeric part of postal codes for positioning
+    # Get depot location from routes data
+    depot_location = '08020'  # Default depot
+    if not routes_df.empty:
+        # Try to get depot from solution data
+        if 'depot_location' in routes_df.columns and not routes_df['depot_location'].isna().all():
+            depot_location = routes_df.iloc[0]['depot_location']
+        elif 'route_sequence' in routes_df.columns:
+            # Try to find depot from route sequences (usually first and last)
+            for _, route in routes_df.iterrows():
+                if route['route_sequence'] and len(route['route_sequence']) > 0:
+                    depot_location = route['route_sequence'][0]
+                    break
+    
+    # Calculate total distance for title
+    total_distance = sum(route.get('route_distance', 0) for _, route in routes_df.iterrows())
+    
+    # Create subplots - one per truck
+    n_trucks = len(routes_df)
+    fig, axes = plt.subplots(n_trucks, 1, figsize=(figsize[0], figsize[1] * n_trucks * 0.7))
+    
+    # Handle single truck case
+    if n_trucks == 1:
+        axes = [axes]
+    
+    # Convert postal codes to coordinates for visualization
+    unique_postal_codes = list(set(orders_df['postal_code'].tolist()))
+    if depot_location not in unique_postal_codes:
+        unique_postal_codes.append(depot_location)
+    
     postal_coords = {}
-    for _, order in orders_df.iterrows():
-        postal_code = order['postal_code']
-        # Convert postal code to coordinate (e.g., 08027 -> x=0, 08028 -> x=1, etc.)
-        coord_x = int(postal_code) - int(orders_df['postal_code'].min())
-        coord_y = 0  # Simple 1D layout on x-axis
-        postal_coords[postal_code] = (coord_x, coord_y)
+    sorted_codes = sorted(unique_postal_codes)
+    for postal_code in sorted_codes:
+        # Use actual postal code differences for proportional spacing
+        coord_x = int(postal_code) - int(min(sorted_codes))
+        postal_coords[postal_code] = coord_x
     
-    # Define colors for different trucks
-    colors = plt.cm.Set1(np.linspace(0, 1, len(solution_df)))
-    truck_colors = {}
+    # Colors for trucks
+    colors = plt.cm.Set1(np.linspace(0, 1, max(n_trucks, 3)))
     
-    # Plot order locations
-    logger.info("Plotting order locations...")
-    for _, order in orders_df.iterrows():
-        postal_code = order['postal_code']
-        x, y = postal_coords[postal_code]
-        
-        # Plot order as a circle with size proportional to volume
-        volume = order['volume']
-        size = max(100, volume * 3)  # Scale size based on volume
-        
-        ax.scatter(x, y, s=size, c='lightblue', edgecolors='navy', 
-                  alpha=0.7, zorder=3, linewidth=2)
-        
-        # Add order label with volume information
-        ax.annotate(f"Order {order['order_id']}\n{volume}m³", 
-                   (x, y), xytext=(0, 15), textcoords='offset points',
-                   ha='center', va='bottom', fontsize=10, fontweight='bold',
-                   bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8))
-    
-    # Plot truck routes
-    logger.info("Plotting truck routes...")
-    legend_elements = []
-    
-    for idx, (_, route) in enumerate(solution_df.iterrows()):
+    # Create individual plots for each truck
+    for idx, (_, route) in enumerate(routes_df.iterrows()):
+        ax = axes[idx]
         truck_id = route['truck_id']
         assigned_orders = route['assigned_orders']
-        postal_codes = route['postal_codes']
+        color = colors[idx % len(colors)]
+        route_distance = route.get('route_distance', 0)
+        route_sequence = route.get('route_sequence', [])
         
-        if len(assigned_orders) == 0:
-            continue
+        # Plot depot
+        depot_x = postal_coords[depot_location]
+        ax.scatter(depot_x, 0, s=500, c='red', marker='*', 
+                  edgecolors='darkred', linewidth=3, zorder=5, label='Depot')
+        ax.annotate(f'DEPOT\n{depot_location}', (depot_x, 0), 
+                   xytext=(0, -30), textcoords='offset points',
+                   ha='center', va='top', fontsize=11, fontweight='bold',
+                   bbox=dict(boxstyle='round,pad=0.4', facecolor='red', alpha=0.3))
+        
+        # Plot orders assigned to this truck
+        for order_id in assigned_orders:
+            order_row = orders_df[orders_df['order_id'] == order_id]
+            if not order_row.empty:
+                order = order_row.iloc[0]
+                postal_code = order['postal_code']
+                x_coord = postal_coords[postal_code]
+                volume = order['volume']
+                
+                # Plot order location with size proportional to volume
+                size = max(200, volume * 5)
+                ax.scatter(x_coord, 0, s=size, c='lightgreen', 
+                          edgecolors='darkgreen', linewidth=2, zorder=4, alpha=0.8)
+                ax.annotate(f'{order_id}\n{volume}m³', (x_coord, 0), 
+                           xytext=(0, 25), textcoords='offset points',
+                           ha='center', va='bottom', fontsize=10, fontweight='bold',
+                           bbox=dict(boxstyle='round,pad=0.3', facecolor='lightgreen', alpha=0.8))
+        
+        # Plot ACTUAL route sequence if available
+        if route_sequence and isinstance(route_sequence, list) and len(route_sequence) > 1:
+            # Get coordinates for the actual route sequence
+            route_x_coords = []
+            valid_sequence = []
             
-        color = colors[idx]
-        truck_colors[truck_id] = color
+            for loc in route_sequence:
+                if loc in postal_coords:
+                    route_x_coords.append(postal_coords[loc])
+                    valid_sequence.append(loc)
+            
+            if len(route_x_coords) > 1:
+                # Plot the route line following the EXACT sequence
+                ax.plot(route_x_coords, [0] * len(route_x_coords), 
+                       color=color, linewidth=3, alpha=0.9, zorder=3, linestyle='-')
+                
+                # Add directional arrows between consecutive points
+                for i in range(len(route_x_coords) - 1):
+                    start_x = route_x_coords[i]
+                    end_x = route_x_coords[i + 1]
+                    
+                    # Calculate arrow position (closer to end point)
+                    arrow_x = start_x + 0.7 * (end_x - start_x)
+                    
+                    # Calculate arrow direction and size
+                    dx = 0.4 if end_x > start_x else -0.4
+                    ax.annotate('', xy=(arrow_x + dx/2, 0), xytext=(arrow_x - dx/2, 0),
+                               arrowprops=dict(arrowstyle='->', color=color, lw=3))
+                
+                # Add route sequence text at the top
+                route_text = " → ".join(valid_sequence)
+                ax.text(0.5, 0.9, f"Route: {route_text}", transform=ax.transAxes,
+                       ha='center', va='center', fontsize=10, fontweight='bold',
+                       bbox=dict(boxstyle='round,pad=0.5', facecolor=color, alpha=0.3))
         
-        # Get truck information
+        # Customize subplot with distance in title
+        ax.set_title(f'Truck {truck_id} - {len(assigned_orders)} Orders ({route_distance:.1f} km)',
+                    fontsize=13, fontweight='bold', pad=20)
+        ax.set_xlim(min(postal_coords.values()) - 1, max(postal_coords.values()) + 1)
+        ax.set_ylim(-1.0, 1.0)
+        ax.grid(True, alpha=0.3)
+        ax.set_xlabel('Postal Code Distance', fontsize=11)
+        ax.set_yticks([])  # Hide y-axis ticks
+        
+        # Add truck info box
         truck_info = trucks_df[trucks_df['truck_id'] == truck_id].iloc[0]
         truck_cost = truck_info['cost']
         truck_capacity = truck_info['capacity']
-        
-        # Calculate route coordinates
-        route_coords = [postal_coords[pc] for pc in postal_codes]
-        
-        if len(route_coords) > 1:
-            # Plot route as connected line segments
-            x_coords = [coord[0] for coord in route_coords]
-            y_coords = [coord[1] for coord in route_coords]
-            
-            ax.plot(x_coords, y_coords, color=color, linewidth=3, 
-                   alpha=0.8, zorder=2, marker='o', markersize=8)
-            
-            # Add arrows to show direction
-            for i in range(len(x_coords) - 1):
-                dx = x_coords[i+1] - x_coords[i]
-                dy = y_coords[i+1] - y_coords[i]
-                ax.annotate('', xy=(x_coords[i+1], y_coords[i+1]), 
-                           xytext=(x_coords[i], y_coords[i]),
-                           arrowprops=dict(arrowstyle='->', color=color, lw=2))
-        
-        # Add to legend
         total_volume = sum(orders_df[orders_df['order_id'].isin(assigned_orders)]['volume'])
-        utilization = (total_volume / truck_capacity) * 100
+        utilization = (total_volume / truck_capacity) * 100 if truck_capacity > 0 else 0
         
-        legend_elements.append(
-            plt.Line2D([0], [0], color=color, linewidth=3,
-                      label=f'Truck {truck_id}: €{truck_cost:.0f} ({utilization:.1f}% full)')
-        )
+        info_text = f"Cost: €{truck_cost:.0f}\nCapacity: {truck_capacity:.0f}m³\nUtilization: {utilization:.1f}%"
+        ax.text(0.02, 0.02, info_text, transform=ax.transAxes, fontsize=10,
+               verticalalignment='bottom', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.9))
     
-    # Customize plot appearance
-    ax.set_xlabel('Postal Code Distance (km)', fontsize=12, fontweight='bold')
-    ax.set_ylabel('Route Layout', fontsize=12, fontweight='bold')
-    ax.set_title('Vehicle Routing Optimization - Delivery Routes', 
-                fontsize=16, fontweight='bold', pad=20)
-    
-    # Set axis limits with padding
-    x_coords = [coord[0] for coord in postal_coords.values()]
-    ax.set_xlim(min(x_coords) - 0.5, max(x_coords) + 0.5)
-    ax.set_ylim(-0.5, 0.5)
-    
-    # Add grid for better readability
-    ax.grid(True, alpha=0.3)
-    
-    # Add legend
-    if legend_elements:
-        ax.legend(handles=legend_elements, loc='upper right', 
-                 bbox_to_anchor=(1.0, 1.0), fontsize=10)
-    
-    # Add summary text box
-    total_cost = sum(trucks_df[trucks_df['truck_id'].isin(solution_df['truck_id'])]['cost'])
-    total_orders = len(orders_df)
-    trucks_used = len(solution_df)
-    
-    summary_text = f"Summary:\n• {trucks_used} trucks used\n• {total_orders} orders delivered\n• Total cost: €{total_cost:.0f}"
-    ax.text(0.02, 0.98, summary_text, transform=ax.transAxes, fontsize=10,
-           verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+    # Overall title with total distance
+    fig.suptitle(f'Vehicle Routes - Total Distance: {total_distance:.1f} km', 
+                fontsize=18, fontweight='bold', y=0.98)
     
     plt.tight_layout()
     
     # Save plot if path provided
     if save_path:
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        logger.info(f"Route plot saved to {save_path}")
+        logger.info(f"Individual truck route plots saved to {save_path}")
     
-    logger.info("Route visualization completed")
+    logger.info(f"Individual truck route visualization completed with total distance: {total_distance:.1f} km")
     return fig
 
 
