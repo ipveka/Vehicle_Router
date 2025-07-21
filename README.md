@@ -1,14 +1,81 @@
 # Vehicle Router
 
-A production-ready Python application for solving Vehicle Routing Problems (VRP) with order assignment optimization using Mixed Integer Linear Programming (MILP). Includes both a command-line interface and an interactive Streamlit web application.
+A production-ready Python application for solving Vehicle Routing Problems (VRP) with both order assignment and route optimization using Mixed Integer Linear Programming (MILP). Features dual optimization models: standard cost minimization and enhanced distance-aware routing. Includes both a command-line interface and an interactive Streamlit web application.
 
 ## Problem Description
 
-The Vehicle Router solves the classic Vehicle Routing Problem with capacity constraints, where the goal is to optimally assign orders to trucks and determine delivery routes while minimizing total operational costs. The system considers:
+The Vehicle Router solves the Capacitated Vehicle Routing Problem (CVRP) with **three distinct optimization methodologies**, each designed for different use cases and computational requirements:
 
+### 🔵 **Methodology 1: Standard MILP (Cost-Only Optimization)**
+- **Objective**: Pure cost minimization through optimal truck selection and order assignment
+- **Algorithm**: Mixed Integer Linear Programming (MILP) using PuLP/CBC solver
+- **Route Handling**: Basic sorted postal code sequences (no route optimization)
+- **Features**:
+  - Fast solving (< 1 second for typical problems)
+  - Minimal memory usage (< 50MB)
+  - Excellent scalability (handles 100+ orders efficiently)
+  - **Configurable Depot Return**: Option to require trucks to return to depot (default: False)
+  - **Depot Location Configuration**: Customizable depot location (default: postal code 08020)
+- **Use Case**: Cost-sensitive scenarios where route distances are secondary
+- **Best For**: Large problem instances, budget-constrained operations, quick decision making
+
+### 🟡 **Methodology 2: Standard MILP + Greedy Route Optimization** ⭐ (Default)
+- **Objective**: Minimize costs (MILP) + minimize distances (post-optimization greedy algorithm)
+- **Algorithm**: Two-phase hybrid optimization (MILP → Greedy permutation testing)
+- **Route Handling**: Exhaustive permutation testing for optimal route sequences
+- **Features**:
+  - **Phase 1**: Cost-optimal truck selection via MILP
+  - **Phase 2**: Distance-optimal route sequences via greedy algorithm
+  - **Comprehensive Logging**: Detailed progress tracking with performance metrics
+  - **Permutation Testing**: Tests all possible route combinations (efficient for ≤8 orders per truck)
+  - **Configurable Depot Return**: Option to require trucks to return to depot (default: False)
+  - **Distance Optimization**: Significant route distance reduction with minimal computational overhead
+- **Performance**: MILP (< 1s) + Greedy (< 5s), handles 8! = 40,320 permutations per truck
+- **Use Case**: Balanced cost-distance optimization with moderate computational resources
+- **Best For**: Real-world logistics where both cost and efficiency matter
+
+### 🟢 **Methodology 3: Enhanced MILP (Integrated Cost-Distance Optimization)**
+- **Objective**: Multi-objective weighted optimization (simultaneous cost + distance minimization)
+- **Algorithm**: Advanced MILP with routing variables and flow conservation constraints
+- **Route Handling**: Integrated route optimization within MILP formulation
+- **Features**: 
+  - **Multi-objective optimization** with configurable cost/distance weights (α=0.6, β=0.4)
+  - **Integrated route variables**: Binary variables z_{k,l,j} for truck movements
+  - **Flow conservation constraints**: Ensures valid depot-to-depot routes
+  - **Subtour elimination**: Prevents disconnected route segments
+  - **Advanced route reconstruction**: Extracts optimal sequences from MILP solution
+  - **Configurable Depot Return**: Option to require trucks to return to depot (default: True)
+- **Performance**: 1-30 seconds solve time, 100-500MB memory usage
+- **Use Case**: High-quality solutions where both cost and distance are equally important
+- **Best For**: Small-medium instances (≤50 orders), quality-critical applications
+
+### 📊 **Methodology Comparison**
+
+| Criterion | Standard MILP | MILP + Greedy | Enhanced MILP |
+|-----------|---------------|---------------|---------------|
+| **Primary Focus** | Cost minimization | Cost + Route efficiency | Integrated optimization |
+| **Algorithm Type** | Pure MILP | Hybrid MILP-Heuristic | Advanced MILP |
+| **Route Quality** | Basic (sorted) | Optimized (permutations) | Optimal (integrated) |
+| **Solve Time** | Fastest (< 1s) | Fast (< 5s) | Moderate (< 30s) |
+| **Memory Usage** | Minimal | Low | Moderate |
+| **Scalability** | Excellent | Very Good | Good |
+| **Solution Guarantee** | Cost-optimal | Cost-optimal + Route-heuristic | Multi-objective optimal |
+| **Depot Return** | Configurable | Configurable | Configurable |
+| **Distance Calculation** | Post-hoc | Optimized post-MILP | Integrated in MILP |
+
+### Key Features
+
+Both models consider:
 - **Order Requirements**: Each order has a specific volume and delivery location (postal code)
 - **Truck Constraints**: Each truck has a maximum capacity and associated operational cost
-- **Optimization Goal**: Minimize total cost while ensuring all orders are delivered within capacity limits
+- **Distance Matrix**: Travel distances between all postal code locations
+- **Capacity Limits**: Ensuring all orders are delivered within truck capacity constraints
+
+**Enhanced Model Additional Features**:
+- **Depot Configuration**: Configurable depot location where trucks start and end routes
+- **Route Optimization**: Actual route sequences with distance calculations
+- **Multi-Objective**: Balanced optimization of costs and distances with user-defined weights
+- **Advanced Visualization**: Individual route plots per truck with clear depot-to-customer paths
 
 ### Example Problem
 
@@ -50,7 +117,8 @@ vehicle_router/
 ├── vehicle_router/              # Core optimization package
 │   ├── __init__.py
 │   ├── data_generator.py       # Data generation and management
-│   ├── optimizer.py            # MILP optimization engine
+│   ├── optimizer.py            # Standard MILP optimization engine
+│   ├── enhanced_optimizer.py   # Enhanced MILP with distance optimization
 │   ├── plotting.py             # Visualization and plotting
 │   ├── validation.py           # Solution validation
 │   └── utils.py                # Utility functions
@@ -143,19 +211,26 @@ streamlit run app/streamlit_app.py
 ```
 
 The Streamlit application provides:
+- **Dual Optimization Models**: Choose between standard cost minimization or enhanced distance-aware routing
+- **Multi-Objective Optimization**: Configure weights for cost vs. distance optimization
 - **Interactive Data Loading**: Upload custom CSV files or use example data
-- **Real-time Optimization**: Run optimization with configurable parameters
-- **Interactive Visualizations**: Explore results with Plotly charts
+- **Real-time Optimization**: Run optimization with configurable parameters and solver timeout
+- **Enhanced Route Visualization**: View actual route sequences with distances and depot locations
+- **Interactive Visualizations**: Explore results with Plotly charts including route maps and cost analysis
 - **Data Export**: Download results in Excel, CSV, or text formats
 - **Comprehensive Analysis**: Detailed solution analysis and methodology explanation
 
 #### Streamlit App Features
 
-1. **Introduction Section**: Overview of the application and optimization objectives
+1. **Introduction Section**: Overview of the application and dual optimization approaches
 2. **Data Exploration**: Interactive tables and visualizations of input data
-3. **Solution Analysis**: Detailed results with export capabilities
-4. **Visualization**: Interactive charts for routes, costs, and utilization
-5. **Methodology**: In-depth explanation of the MILP formulation and algorithms
+3. **Advanced Configuration**: 
+   - **Model Selection**: Choose between Standard (cost + greedy routes) or Enhanced (integrated optimization)
+   - **Depot Configuration**: Customizable depot location and return requirements
+   - **Optimization Parameters**: Solver timeout, validation options, objective weights
+4. **Solution Analysis**: Detailed results with route sequences, distances, and export capabilities
+5. **Enhanced Visualization**: Interactive route maps with actual optimized sequences and total distances
+6. **Methodology**: In-depth explanation of both MILP formulations and greedy algorithms
 
 ### Command Line Interface
 
@@ -171,13 +246,17 @@ python src/main.py
 python src/main.py [OPTIONS]
 
 Options:
-  --random-data        Use random data instead of example data
-  --seed INTEGER       Random seed for data generation (default: 42)
-  --no-plots          Skip plot generation
-  --show-plots        Display plots interactively
-  --no-validation     Skip solution validation
-  --quiet             Reduce output verbosity
-  --log-level LEVEL   Set logging level (DEBUG, INFO, WARNING, ERROR)
+  --optimizer {standard,enhanced}  Optimizer type (default: standard)
+                                  standard: Cost minimization with optional greedy route optimization
+                                  enhanced: Cost + distance optimization with integrated routing
+  --depot POSTAL_CODE             Depot postal code (default: 08020)
+  --quiet                         Reduce output verbosity
+
+Examples:
+  python src/main.py                        # Standard model with greedy routes, no depot return
+  python src/main.py --optimizer enhanced   # Enhanced model with depot return enabled
+  python src/main.py --depot 08031          # Standard model with custom depot location
+  python src/main.py --quiet               # Minimal output
 ```
 
 ### Example Output

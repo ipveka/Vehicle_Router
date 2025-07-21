@@ -26,10 +26,11 @@ The system uses Mixed Integer Linear Programming (MILP) to find optimal solution
 - Support for custom data inputs
 - Pandas-based data structures for easy manipulation
 
-### 🎯 **Optimization Engine**
-- MILP formulation for exact solutions
-- Capacity constraint handling
-- Cost minimization objectives
+### 🎯 **Dual Optimization Engines**
+- **Standard Model**: MILP cost optimization + greedy route optimization
+- **Enhanced Model**: Integrated MILP with simultaneous cost and distance optimization
+- **Configurable Depot Options**: Customizable depot location and return requirements
+- **Advanced Route Optimization**: Multiple algorithms for different use cases
 - Scalable to medium-large problem instances
 
 ### 📈 **Visualization & Analysis**

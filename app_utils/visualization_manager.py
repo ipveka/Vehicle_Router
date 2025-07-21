@@ -216,74 +216,229 @@ class VisualizationManager:
 
     
     def create_route_visualization(self, routes_df: pd.DataFrame, orders_df: pd.DataFrame, trucks_df: pd.DataFrame):
-        """Create a route visualization plot"""
-        fig = go.Figure()
+        """Create individual route plots for each truck with proper route sequences and distance calculation"""
         
-        # Convert postal codes to coordinates
+        # Get depot location from routes data or use default
+        depot_location = '08020'  # Default depot
+        if not routes_df.empty:
+            # Try to get depot from solution data
+            if 'depot_location' in routes_df.columns:
+                depot_location = routes_df.iloc[0]['depot_location']
+            elif 'route_sequence' in routes_df.columns:
+                # Try to find depot from route sequences (usually first and last)
+                for _, route in routes_df.iterrows():
+                    if isinstance(route['route_sequence'], list) and len(route['route_sequence']) > 0:
+                        depot_location = route['route_sequence'][0]
+                        break
+        
+        # Create subplots - one per truck only
+        n_trucks = len(routes_df) if not routes_df.empty else 0
+        if n_trucks == 0:
+            # No routes to display
+            fig = go.Figure()
+            fig.add_annotation(text="No routes to display", x=0.5, y=0.5, showarrow=False)
+            return fig
+        
+        # Calculate total distance for title
+        total_distance = sum(route.get('route_distance', 0) for _, route in routes_df.iterrows())
+        
+        # Create subplot titles with proper distance calculation
+        subplot_titles = []
+        for _, route in routes_df.iterrows():
+            truck_id = route['truck_id']
+            n_orders = len(route['assigned_orders'])
+            distance = route.get('route_distance', 0)
+            subplot_titles.append(f"🚚 Truck {truck_id} - {n_orders} Orders ({distance:.1f} km)")
+        
+        fig = make_subplots(
+            rows=n_trucks, 
+            cols=1,
+            subplot_titles=subplot_titles,
+            vertical_spacing=0.12,
+            specs=[[{"secondary_y": False}] for _ in range(n_trucks)]
+        )
+        
+        # Convert postal codes to coordinates for visualization
         postal_coords = {}
-        for _, order in orders_df.iterrows():
-            postal_code = order['postal_code']
-            coord_x = int(postal_code) - int(orders_df['postal_code'].min())
+        unique_postal_codes = list(set(orders_df['postal_code'].tolist()))
+        
+        # Add depot to unique postal codes if not already there
+        if depot_location not in unique_postal_codes:
+            unique_postal_codes.append(depot_location)
+        
+        # Create coordinate system based on postal code values for better spacing
+        sorted_codes = sorted(unique_postal_codes)
+        for postal_code in sorted_codes:
+            # Use actual postal code differences for proportional spacing
+            coord_x = int(postal_code) - int(min(sorted_codes))
             postal_coords[postal_code] = coord_x
         
-        # Plot order locations
-        for _, order in orders_df.iterrows():
-            postal_code = order['postal_code']
-            x_coord = postal_coords[postal_code]
-            
-            fig.add_trace(go.Scatter(
-                x=[x_coord],
-                y=[0],
-                mode='markers+text',
-                marker=dict(size=max(10, order['volume']), color='lightblue', line=dict(width=2, color='navy')),
-                text=f"Order {order['order_id']}<br>{order['volume']}m³",
-                textposition="top center",
-                name=f"Order {order['order_id']}",
-                showlegend=False
-            ))
-        
-        # Plot truck routes
+        # Colors for trucks
         colors = px.colors.qualitative.Set1
+        depot_x = postal_coords[depot_location]
+        
+        # INDIVIDUAL TRUCK PLOTS
         for idx, (_, route) in enumerate(routes_df.iterrows()):
             truck_id = route['truck_id']
             assigned_orders = route['assigned_orders']
+            color = colors[idx % len(colors)]
+            subplot_row = idx + 1
+            route_distance = route.get('route_distance', 0)
+            route_sequence = route.get('route_sequence', [])
             
-            if len(assigned_orders) >= 1:  # Show trucks with 1 or more orders
-                # Get coordinates for route
-                route_coords = []
-                for order_id in assigned_orders:
-                    order_postal = orders_df[orders_df['order_id'] == order_id]['postal_code'].iloc[0]
-                    route_coords.append(postal_coords[order_postal])
+            # Add depot to this truck's subplot
+            fig.add_trace(
+                go.Scatter(
+                    x=[depot_x],
+                    y=[0],
+                    mode='markers+text',
+                    marker=dict(size=35, color='red', symbol='star', line=dict(width=3, color='darkred')),
+                    text=f"DEPOT<br>{depot_location}",
+                    textposition="bottom center",
+                    name="Depot",
+                    showlegend=False,
+                    hovertemplate=f"<b>Depot</b><br>Location: {depot_location}<extra></extra>"
+                ),
+                row=subplot_row, col=1
+            )
+            
+            # Add only the orders assigned to this truck
+            for order_id in assigned_orders:
+                order_row = orders_df[orders_df['order_id'] == order_id]
+                if not order_row.empty:
+                    order = order_row.iloc[0]
+                    postal_code = order['postal_code']
+                    x_coord = postal_coords[postal_code]
+                    
+                    fig.add_trace(
+                        go.Scatter(
+                            x=[x_coord],
+                            y=[0],
+                            mode='markers+text',
+                            marker=dict(size=max(25, order['volume']/1.2), color='lightgreen', line=dict(width=2, color='darkgreen')),
+                            text=f"{order_id}<br>{order['volume']}m³",
+                            textposition="top center",
+                            name=f"Order {order_id}",
+                            showlegend=False,
+                            hovertemplate=f"<b>Order {order_id}</b><br>Volume: {order['volume']} m³<br>Location: {postal_code}<extra></extra>"
+                        ),
+                        row=subplot_row, col=1
+                    )
+            
+            # Add the ACTUAL route sequence for this truck
+            if route_sequence and isinstance(route_sequence, list) and len(route_sequence) > 1:
+                # Get coordinates for the actual route sequence
+                route_x_coords = []
+                valid_sequence = []
                 
-                # Plot route line (or single point for single orders)
-                if len(route_coords) > 1:
-                    # Multiple orders - show as connected route
-                    fig.add_trace(go.Scatter(
-                        x=route_coords,
-                        y=[0] * len(route_coords),
-                        mode='lines+markers',
-                        line=dict(width=3, color=colors[idx % len(colors)]),
-                        marker=dict(size=8),
-                        name=f'Truck {truck_id}',
-                        showlegend=True
-                    ))
-                else:
-                    # Single order - show as single marker
-                    fig.add_trace(go.Scatter(
-                        x=route_coords,
-                        y=[0] * len(route_coords),
-                        mode='markers',
-                        marker=dict(size=12, color=colors[idx % len(colors)], symbol='diamond'),
-                        name=f'Truck {truck_id}',
-                        showlegend=True
-                    ))
+                for loc in route_sequence:
+                    if loc in postal_coords:
+                        route_x_coords.append(postal_coords[loc])
+                        valid_sequence.append(loc)
+                
+                if len(route_x_coords) > 1:
+                    # Plot the route line following the EXACT sequence
+                    fig.add_trace(
+                        go.Scatter(
+                            x=route_x_coords,
+                            y=[0] * len(route_x_coords),
+                            mode='lines',
+                            line=dict(width=3, color=color, dash='solid'),  # Reduced line width
+                            name=f'Route',
+                            showlegend=False,
+                            hovertemplate=f'<b>Truck {truck_id} Route</b><br>Distance: {route_distance:.1f} km<br>Sequence: {" → ".join(valid_sequence)}<extra></extra>'
+                        ),
+                        row=subplot_row, col=1
+                    )
+                    
+                    # Add directional arrows between consecutive points
+                    for i in range(len(route_x_coords) - 1):
+                        start_x = route_x_coords[i]
+                        end_x = route_x_coords[i + 1]
+                        
+                        # Calculate arrow position (closer to end point)
+                        arrow_x = start_x + 0.7 * (end_x - start_x)
+                        
+                        # Calculate arrow direction and size
+                        arrow_dx = 0.3 if end_x > start_x else -0.3
+                        
+                        fig.add_annotation(
+                            x=arrow_x,
+                            y=0,
+                            ax=arrow_x - arrow_dx,
+                            ay=0,
+                            axref=f'x{subplot_row}',
+                            ayref=f'y{subplot_row}',
+                            arrowhead=2,
+                            arrowsize=1.5,
+                            arrowwidth=3,
+                            arrowcolor=color,
+                            showarrow=True,
+                            row=subplot_row, col=1
+                        )
+                    
+                    # Add route sequence text at the top
+                    route_text = " → ".join(valid_sequence)
+                    fig.add_annotation(
+                        x=sum(route_x_coords) / len(route_x_coords),
+                        y=0.5,
+                        text=f"<b>Route:</b> {route_text}",
+                        showarrow=False,
+                        font=dict(size=10, color=color),
+                        bgcolor="rgba(255,255,255,0.9)",
+                        bordercolor=color,
+                        borderwidth=1,
+                        row=subplot_row, col=1
+                    )
+            
+            # Add truck info box
+            truck_info = trucks_df[trucks_df['truck_id'] == truck_id].iloc[0]
+            truck_cost = truck_info['cost']
+            truck_capacity = truck_info['capacity']
+            total_volume = sum(orders_df[orders_df['order_id'].isin(assigned_orders)]['volume'])
+            utilization = (total_volume / truck_capacity) * 100 if truck_capacity > 0 else 0
+            
+            info_text = f"Cost: €{truck_cost:.0f} | Capacity: {truck_capacity:.0f}m³ | Utilization: {utilization:.1f}%"
+            fig.add_annotation(
+                x=0.02,
+                y=0.02,
+                text=info_text,
+                showarrow=False,
+                font=dict(size=9),
+                bgcolor="rgba(255,255,255,0.9)",
+                bordercolor="gray",
+                borderwidth=1,
+                xref="paper",
+                yref="paper",
+                row=subplot_row, col=1
+            )
         
+        # Update layout for all subplots with total distance in title
         fig.update_layout(
-            title='Delivery Routes Visualization',
-            xaxis_title='Postal Code Distance (km)',
-            yaxis=dict(showticklabels=False, showgrid=False),
-            height=400
+            height=280 * n_trucks,  # Slightly more height for better visibility
+            title_text=f"🚛 Vehicle Routes - Total Distance: {total_distance:.1f} km",
+            title_x=0.5,
+            title_font=dict(size=16, color='darkblue'),
+            showlegend=False,
+            hovermode='closest'
         )
+        
+        # Update x and y axes for all subplots
+        for i in range(n_trucks):
+            row_num = i + 1
+            fig.update_xaxes(
+                title_text="Postal Code Distance" if row_num == n_trucks else "",
+                showgrid=True,
+                gridwidth=1,
+                gridcolor='lightgray',
+                row=row_num, col=1
+            )
+            fig.update_yaxes(
+                showticklabels=False,
+                showgrid=False,
+                range=[-0.8, 0.8],
+                row=row_num, col=1
+            )
         
         return fig
     

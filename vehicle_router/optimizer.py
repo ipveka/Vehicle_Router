@@ -61,7 +61,8 @@ class VrpOptimizer:
     """
     
     def __init__(self, orders_df: pd.DataFrame, trucks_df: pd.DataFrame, 
-                 distance_matrix: pd.DataFrame):
+                 distance_matrix: pd.DataFrame, depot_location: Optional[str] = None,
+                 depot_return: bool = False, enable_greedy_routes: bool = True):
         """
         Initialize the VRP Optimizer with problem data
         
@@ -69,6 +70,9 @@ class VrpOptimizer:
             orders_df (pd.DataFrame): Orders data with columns [order_id, volume, postal_code]
             trucks_df (pd.DataFrame): Trucks data with columns [truck_id, capacity, cost]
             distance_matrix (pd.DataFrame): Distance matrix between postal codes
+            depot_location (Optional[str]): Depot postal code. If None, uses default '08020'.
+            depot_return (bool): Whether trucks must return to depot after deliveries. Default False.
+            enable_greedy_routes (bool): Whether to apply greedy route optimization. Default True.
             
         Raises:
             ValueError: If input data is invalid or inconsistent
@@ -83,6 +87,24 @@ class VrpOptimizer:
         self.orders_df = orders_df.copy()
         self.trucks_df = trucks_df.copy()
         self.distance_matrix = distance_matrix.copy()
+        
+        # Set depot location
+        if depot_location is None:
+            self.depot_location = '08020'  # Default depot
+        else:
+            if depot_location in self.distance_matrix.index:
+                self.depot_location = depot_location
+            else:
+                logger.warning(f"Depot location '{depot_location}' not found in distance matrix, using default '08020'")
+                self.depot_location = '08020'
+        
+        # Store configuration options
+        self.depot_return = depot_return
+        self.enable_greedy_routes = enable_greedy_routes
+        
+        logger.info(f"Depot location: {self.depot_location}")
+        logger.info(f"Depot return enabled: {self.depot_return}")
+        logger.info(f"Greedy route optimization enabled: {self.enable_greedy_routes}")
         
         # Initialize optimization components
         self.model = None
@@ -344,7 +366,7 @@ class VrpOptimizer:
         
         try:
             # Solve the optimization problem
-            self.model.solve(pulp.PULP_CBC_CMD(msg=0))  # msg=0 suppresses solver output
+            self.model.solve(pulp.PULP_CBC_CMD(msg=0))
             
             solve_time = time.time() - start_time
             
@@ -429,6 +451,11 @@ class VrpOptimizer:
                 'assigned_orders': assigned_orders
             }
         
+        # Apply greedy route optimization if enabled
+        if self.enable_greedy_routes:
+            logger.info("Applying greedy route optimization...")
+            self._optimize_routes_greedy(assignments, selected_trucks)
+        
         # Store structured solution data
         self.solution_data = {
             'assignments': assignments,
@@ -480,8 +507,10 @@ class VrpOptimizer:
         # Create assignments DataFrame
         assignments_df = pd.DataFrame(self.solution_data['assignments'])
         
-        # Create routes DataFrame (simplified - one row per truck with assigned orders)
+        # Create routes DataFrame with basic route information for standard optimizer
         routes_data = []
+        depot_location = '08020'  # Default depot for standard optimizer
+        
         for truck_id in self.solution_data['selected_trucks']:
             assigned_orders = [a['order_id'] for a in self.solution_data['assignments'] if a['truck_id'] == truck_id]
             
@@ -491,11 +520,29 @@ class VrpOptimizer:
                 postal_code = self.orders_df[self.orders_df['order_id'] == order_id]['postal_code'].iloc[0]
                 order_postal_codes.append(postal_code)
             
+            # Use optimized route if available from greedy algorithm, otherwise create simple route
+            if hasattr(self, '_optimized_routes') and truck_id in self._optimized_routes:
+                # Use the optimized route from greedy algorithm
+                route_sequence = self._optimized_routes[truck_id]['route_sequence']
+                route_distance = self._optimized_routes[truck_id]['route_distance']
+            else:
+                # Create a simple route sequence: depot -> orders -> (depot if depot_return)
+                sorted_postal_codes = sorted(order_postal_codes)
+                route_sequence = [self.depot_location] + sorted_postal_codes
+                if self.depot_return:
+                    route_sequence.append(self.depot_location)
+                
+                # Calculate basic route distance using distance matrix if available
+                route_distance = self._calculate_route_distance(route_sequence)
+            
             routes_data.append({
                 'truck_id': truck_id,
                 'assigned_orders': assigned_orders,
                 'postal_codes': order_postal_codes,
-                'num_orders': len(assigned_orders)
+                'route_sequence': route_sequence,
+                'route_distance': route_distance,
+                'num_orders': len(assigned_orders),
+                'depot_location': depot_location
             })
         
         routes_df = pd.DataFrame(routes_data)
@@ -548,3 +595,127 @@ class VrpOptimizer:
         lines.append(f"Total Cost: €{total_cost:.0f}")
         
         return "\n".join(lines)
+    
+    def _optimize_routes_greedy(self, assignments: List[Dict], selected_trucks: List[int]) -> None:
+        """
+        Apply greedy route optimization to minimize travel distances for each truck
+        
+        This algorithm tests all possible route permutations for each truck and selects
+        the one with minimum total distance. It considers depot_return setting.
+        
+        Args:
+            assignments (List[Dict]): Order assignments from MILP solution
+            selected_trucks (List[int]): List of selected truck IDs
+        """
+        from itertools import permutations
+        
+        logger.info("🔍 Starting greedy route optimization algorithm...")
+        logger.info(f"   Processing {len(selected_trucks)} trucks with depot_return={self.depot_return}")
+        
+        total_distance_before = 0
+        total_distance_after = 0
+        
+        for truck_id in selected_trucks:
+            logger.info(f"🚛 Optimizing routes for Truck {truck_id}...")
+            
+            # Get orders assigned to this truck
+            assigned_orders = [a['order_id'] for a in assignments if a['truck_id'] == truck_id]
+            
+            if len(assigned_orders) <= 1:
+                logger.info(f"   Truck {truck_id} has {len(assigned_orders)} order(s), no optimization needed")
+                continue
+            
+            # Get postal codes for assigned orders
+            order_locations = []
+            for order_id in assigned_orders:
+                postal_code = self.orders_df[self.orders_df['order_id'] == order_id]['postal_code'].iloc[0]
+                order_locations.append(postal_code)
+            
+            logger.info(f"   Orders: {assigned_orders}")
+            logger.info(f"   Locations: {order_locations}")
+            
+            # Calculate current route distance (simple sorted order)
+            current_route = [self.depot_location] + sorted(order_locations)
+            if self.depot_return:
+                current_route.append(self.depot_location)
+            
+            current_distance = self._calculate_route_distance(current_route)
+            total_distance_before += current_distance
+            
+            logger.info(f"   Current route: {' → '.join(current_route)}")
+            logger.info(f"   Current distance: {current_distance:.1f} km")
+            
+            # Test all permutations of order locations
+            best_route = current_route
+            best_distance = current_distance
+            permutation_count = 0
+            
+            logger.info(f"   Testing {len(list(permutations(order_locations)))} route permutations...")
+            
+            for perm in permutations(order_locations):
+                permutation_count += 1
+                test_route = [self.depot_location] + list(perm)
+                if self.depot_return:
+                    test_route.append(self.depot_location)
+                
+                test_distance = self._calculate_route_distance(test_route)
+                
+                if test_distance < best_distance:
+                    best_route = test_route
+                    best_distance = test_distance
+                    logger.info(f"   ✨ New best route found: {' → '.join(best_route)} ({best_distance:.1f} km)")
+            
+            total_distance_after += best_distance
+            
+            # Update the route sequence in solution data (will be used in get_solution)
+            improvement = current_distance - best_distance
+            improvement_pct = (improvement / current_distance * 100) if current_distance > 0 else 0
+            
+            logger.info(f"   🎯 Final optimized route: {' → '.join(best_route)}")
+            logger.info(f"   📊 Distance improvement: {improvement:.1f} km ({improvement_pct:.1f}%)")
+            logger.info(f"   📈 Tested {permutation_count} permutations")
+            
+            # Store the optimized route (will be used in get_solution method)
+            if not hasattr(self, '_optimized_routes'):
+                self._optimized_routes = {}
+            self._optimized_routes[truck_id] = {
+                'route_sequence': best_route,
+                'route_distance': best_distance,
+                'improvement': improvement,
+                'permutations_tested': permutation_count
+            }
+        
+        # Log overall improvement
+        total_improvement = total_distance_before - total_distance_after
+        total_improvement_pct = (total_improvement / total_distance_before * 100) if total_distance_before > 0 else 0
+        
+        logger.info("🏁 Greedy route optimization completed!")
+        logger.info(f"   📊 Total distance before: {total_distance_before:.1f} km")
+        logger.info(f"   📊 Total distance after: {total_distance_after:.1f} km")
+        logger.info(f"   🎯 Total improvement: {total_improvement:.1f} km ({total_improvement_pct:.1f}%)")
+    
+    def _calculate_route_distance(self, route_sequence: List[str]) -> float:
+        """
+        Calculate total distance for a route sequence
+        
+        Args:
+            route_sequence (List[str]): List of postal codes in route order
+            
+        Returns:
+            float: Total distance in km
+        """
+        if len(route_sequence) < 2:
+            return 0.0
+        
+        total_distance = 0.0
+        for i in range(len(route_sequence) - 1):
+            from_loc = route_sequence[i]
+            to_loc = route_sequence[i + 1]
+            
+            if from_loc in self.distance_matrix.index and to_loc in self.distance_matrix.columns:
+                distance = self.distance_matrix.loc[from_loc, to_loc]
+                total_distance += distance
+            else:
+                logger.warning(f"Distance not found for {from_loc} → {to_loc}")
+        
+        return total_distance
