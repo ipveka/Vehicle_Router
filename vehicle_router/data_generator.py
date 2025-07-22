@@ -227,8 +227,7 @@ class DataGenerator:
         return trucks_df
     
     def generate_distance_matrix(self, postal_codes: List[str], 
-                                 use_real_distances: bool = False,
-                                 distance_method: str = "haversine") -> pd.DataFrame:
+                                 use_real_distances: bool = False) -> pd.DataFrame:
         """
         Generate distance matrix between postal code locations
         
@@ -238,7 +237,6 @@ class DataGenerator:
         Args:
             postal_codes (List[str]): List of postal codes to calculate distances for
             use_real_distances (bool): Whether to use real-world geographic distances
-            distance_method (str): Method for real distances ("haversine", "osrm", "static")
             
         Returns:
             pd.DataFrame: Symmetric distance matrix with postal codes as both
@@ -246,9 +244,7 @@ class DataGenerator:
                          
         Methods:
             - Simulated (default): 1km per postal code unit difference
-            - Real "haversine": Great circle distance between coordinates
-            - Real "osrm": OpenStreetMap driving routes (free API)
-            - Real "static": Pre-computed regional distances
+            - Real: Pre-computed Barcelona area distances + Haversine fallback
                          
         Example:
             >>> data_gen = DataGenerator(use_example_data=True)
@@ -283,11 +279,11 @@ class DataGenerator:
         
         # Choose distance calculation method
         if use_real_distances:
-            logger.info(f"Using real-world distances with method: {distance_method}")
+            logger.info("Using real-world distances (Barcelona area + Haversine fallback)")
             try:
-                # Try to import and use real distance calculator
-                from .real_distance_calculator import RealDistanceCalculator
-                calculator = RealDistanceCalculator(method=distance_method)
+                # Use real distance calculator
+                from .distance_calculator import DistanceCalculator
+                calculator = DistanceCalculator()
                 return calculator.calculate_distance_matrix(sorted_codes)
             except ImportError:
                 logger.warning("Real distance calculator not available, falling back to simulated distances")

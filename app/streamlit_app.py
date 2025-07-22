@@ -232,7 +232,66 @@ class VehicleRouterApp:
                 help="Location where trucks start and end their routes"
             )
             
-
+            # Real Distances Configuration
+            use_real_distances = st.sidebar.checkbox(
+                "🌍 Use Real-World Distances",
+                value=getattr(st.session_state, 'use_real_distances', False),
+                help="Use OpenStreetMap geocoding for accurate geographic distances (takes longer but more realistic)"
+            )
+            
+            # Check if distance method changed and reload data if needed
+            previous_setting = getattr(st.session_state, 'use_real_distances', False)
+            if use_real_distances != previous_setting:
+                st.session_state.use_real_distances = use_real_distances
+                
+                # Force reload of distance matrix if data is already loaded
+                if st.session_state.data_loaded:
+                    # Clear optimization state since distance matrix is changing
+                    st.session_state.optimization_complete = False
+                    st.session_state.optimization_log = []
+                    
+                    try:
+                        # Ensure data handler has the session state data
+                        if (hasattr(st.session_state, 'orders_df') and 
+                            st.session_state.orders_df is not None):
+                            
+                            # Copy session state data to data handler if needed
+                            if (self.data_handler.orders_df is None or 
+                                self.data_handler.orders_df.empty):
+                                self.data_handler.orders_df = st.session_state.orders_df
+                                self.data_handler.trucks_df = st.session_state.trucks_df
+                            
+                            with st.sidebar.status("🔄 Updating distance matrix...", expanded=False):
+                                if self.data_handler.reload_distance_matrix():
+                                    # Update session state with new distance matrix
+                                    st.session_state.distance_matrix = self.data_handler.distance_matrix
+                                    st.rerun()  # Refresh the app to show updated data
+                                else:
+                                    st.sidebar.error("❌ Failed to update distance matrix")
+                        else:
+                            st.sidebar.warning("⚠️ No valid order data found. Please load data first.")
+                            # Reload the data with new distance setting
+                            st.sidebar.info("🔄 Reloading data with new distance setting...")
+                            if self.data_handler.load_example_data():
+                                st.session_state.orders_df = self.data_handler.orders_df
+                                st.session_state.trucks_df = self.data_handler.trucks_df
+                                st.session_state.distance_matrix = self.data_handler.distance_matrix
+                                st.sidebar.success("✅ Data reloaded with new distance setting!")
+                                st.rerun()
+                            else:
+                                st.sidebar.error("❌ Failed to reload data")
+                                
+                    except Exception as e:
+                        st.sidebar.error(f"❌ Error updating distance matrix: {str(e)}")
+                        import traceback
+                        st.sidebar.error(f"Details: {traceback.format_exc()}")
+            else:
+                # Store in session state for data loading
+                st.session_state.use_real_distances = use_real_distances
+            
+            if use_real_distances:
+                st.sidebar.info("📍 Real distances use OpenStreetMap geocoding + Haversine calculation")
+            
             
             # Model selection with buttons (based on configuration)
             st.sidebar.markdown("**Model Selection:**")

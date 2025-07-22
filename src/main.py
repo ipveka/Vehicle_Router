@@ -84,7 +84,8 @@ class VehicleRouterApp:
             if not self.data_manager.generate_data(
                 use_example_data=self.config['use_example_data'],
                 random_seed=self.config.get('random_seed'),
-                depot_location=self.config['depot_location']
+                depot_location=self.config['depot_location'],
+                use_real_distances=self.config.get('use_real_distances', True)
             ):
                 return False
             
@@ -180,6 +181,8 @@ def main():
                        help='Optimizer type (default: standard)')
     parser.add_argument('--depot', type=str, default='08020',
                        help='Depot postal code (default: 08020)')
+    parser.add_argument('--real-distances', action='store_true',
+                       help='Use real-world distances via OpenStreetMap (default: simulated)')
     parser.add_argument('--quiet', action='store_true', help='Reduce output verbosity')
     
     args = parser.parse_args()
@@ -188,7 +191,7 @@ def main():
     config = {
         'optimizer_type': args.optimizer,
         'depot_location': args.depot,
-        'depot_return': False,  # Default False for all methods
+        'depot_return': False,
         'enable_greedy_routes': True,
         'cost_weight': 0.6,
         'distance_weight': 0.4,
@@ -202,7 +205,9 @@ def main():
         # Genetic algorithm parameters
         'ga_population': 50,
         'ga_generations': 100,
-        'ga_mutation': 0.1
+        'ga_mutation': 0.1,
+        # Distance calculation method
+        'use_real_distances': args.real_distances
     }
     
     # Set up logging

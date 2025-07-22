@@ -72,7 +72,7 @@ class DataManager:
         self.distance_matrix = None
     
     def generate_data(self, use_example_data: bool = True, random_seed: Optional[int] = None, 
-                     depot_location: str = '08020') -> bool:
+                     depot_location: str = '08020', use_real_distances: bool = False) -> bool:
         """
         Generate input data for the optimization problem
         
@@ -80,6 +80,7 @@ class DataManager:
             use_example_data (bool): Whether to use example data
             random_seed (Optional[int]): Random seed for data generation
             depot_location (str): Depot location postal code
+            use_real_distances (bool): Whether to use real-world distances
             
         Returns:
             bool: True if data generation successful, False otherwise
@@ -118,7 +119,8 @@ class DataManager:
                 postal_codes.append(depot_location)
                 self.logger.info(f"Added depot location {depot_location} to postal codes")
                 
-            self.distance_matrix = self.data_generator.generate_distance_matrix(postal_codes)
+            self.distance_matrix = self.data_generator.generate_distance_matrix(
+                postal_codes, use_real_distances=use_real_distances)
             
             if self.distance_matrix.empty:
                 self.logger.error("Failed to generate distance matrix")

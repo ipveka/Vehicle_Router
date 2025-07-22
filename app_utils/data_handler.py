@@ -57,8 +57,13 @@ class DataHandler:
             depot_location = '08020'  # Default depot
             if depot_location not in postal_codes:
                 postal_codes.append(depot_location)
-            self.distance_matrix = self.data_generator.generate_distance_matrix(postal_codes)
             
+            # Check if real distances should be used (from session state or config)
+            use_real_distances = getattr(st.session_state, 'use_real_distances', False)
+            
+            self.distance_matrix = self.data_generator.generate_distance_matrix(
+                postal_codes, use_real_distances=use_real_distances)
+                
             return True
             
         except Exception as e:
@@ -98,8 +103,13 @@ class DataHandler:
             depot_location = '08020'  # Default depot
             if depot_location not in postal_codes:
                 postal_codes.append(depot_location)
+            
+            # Check if real distances should be used (from session state or config)
+            use_real_distances = getattr(st.session_state, 'use_real_distances', False)
+            
             self.data_generator = DataGenerator(use_example_data=False)
-            self.distance_matrix = self.data_generator.generate_distance_matrix(postal_codes)
+            self.distance_matrix = self.data_generator.generate_distance_matrix(
+                postal_codes, use_real_distances=use_real_distances)
             
             return True
             
@@ -207,3 +217,50 @@ class DataHandler:
                 'capacity_utilization': (self.orders_df['volume'].sum() / self.trucks_df['capacity'].sum()) * 100
             }
         }
+    
+    def reload_distance_matrix(self) -> bool:
+        """
+        Reload the distance matrix with current settings (real vs simulated distances)
+        
+        Returns:
+            bool: True if reload successful, False otherwise
+        """
+        try:
+            if self.orders_df is None:
+                st.error("No order data available to reload distance matrix")
+                return False
+            
+            # Generate distance matrix including depot location
+            postal_codes = self.orders_df['postal_code'].tolist()
+            # Add depot location if not already in postal codes
+            depot_location = '08020'  # Default depot
+            if depot_location not in postal_codes:
+                postal_codes.append(depot_location)
+            
+            # Check if real distances should be used (from session state)
+            use_real_distances = getattr(st.session_state, 'use_real_distances', False)
+            
+            # Ensure data generator exists
+            if self.data_generator is None:
+                self.data_generator = DataGenerator(use_example_data=True)
+            
+            # Regenerate distance matrix with current settings
+            new_distance_matrix = self.data_generator.generate_distance_matrix(
+                postal_codes, use_real_distances=use_real_distances)
+            
+            # Validate the new distance matrix
+            if new_distance_matrix is None or new_distance_matrix.empty:
+                st.error("Generated distance matrix is empty")
+                return False
+            
+            # Update the distance matrix
+            self.distance_matrix = new_distance_matrix
+            
+            st.success(f"✅ Distance matrix updated successfully with {'real-world' if use_real_distances else 'simulated'} distances")
+            return True
+            
+        except Exception as e:
+            st.error(f"Error reloading distance matrix: {str(e)}")
+            import traceback
+            st.error(f"Detailed error: {traceback.format_exc()}")
+            return False

@@ -19,11 +19,12 @@ Options:
     --ga-generations INT   Genetic algorithm max generations (default: 100)
     --ga-mutation FLOAT    Genetic algorithm mutation rate (default: 0.1)
 
+    --real-distances       Use real-world distances instead of simulated
     --quiet                Reduce output verbosity
     --help                 Show this help message
 
 Example:
-    python src/comparison.py --timeout 180 --depot-return
+    python src/comparison.py --timeout 180 --depot-return --real-distances
 """
 
 import sys
@@ -80,7 +81,8 @@ class OptimizationComparison:
         if self.config['depot_location'] not in postal_codes:
             postal_codes.append(self.config['depot_location'])
         
-        self.distance_matrix = data_gen.generate_distance_matrix(postal_codes)
+        self.distance_matrix = data_gen.generate_distance_matrix(
+            postal_codes, use_real_distances=self.config.get('use_real_distances', False))
         
         # Log problem characteristics
         total_volume = self.orders_df['volume'].sum()
@@ -553,6 +555,9 @@ def parse_arguments():
                        help='Genetic algorithm mutation rate (default: 0.1)')
     
 
+    parser.add_argument('--real-distances', action='store_true',
+                       help='Use real-world distances instead of simulated')
+    
     parser.add_argument('--quiet', action='store_true',
                        help='Reduce output verbosity')
     
@@ -578,6 +583,7 @@ def main():
         'ga_population': args.ga_population,
         'ga_generations': args.ga_generations,
         'ga_mutation': args.ga_mutation,
+        'use_real_distances': args.real_distances,
         'quiet': args.quiet
     }
     
