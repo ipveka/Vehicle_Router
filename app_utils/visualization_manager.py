@@ -324,6 +324,21 @@ class VisualizationManager:
                         ),
                         row=subplot_row, col=1
                     )
+                    
+                    # Add postal code label below the order point
+                    fig.add_trace(
+                        go.Scatter(
+                            x=[x_coord],
+                            y=[-0.3],  # Position below the order point
+                            mode='text',
+                            text=postal_code,
+                            textfont=dict(size=10, color='darkblue'),
+                            textposition="middle center",
+                            showlegend=False,
+                            hoverinfo='skip'  # Don't show hover for postal code labels
+                        ),
+                        row=subplot_row, col=1
+                    )
             
             # Add the ACTUAL route sequence for this truck
             if route_sequence and isinstance(route_sequence, list) and len(route_sequence) > 1:
@@ -377,21 +392,25 @@ class VisualizationManager:
                             row=subplot_row, col=1
                         )
                     
-                    # Add route sequence text at the top
+                    # Add route sequence text at the top - centered
                     route_text = " → ".join(valid_sequence)
                     fig.add_annotation(
-                        x=sum(route_x_coords) / len(route_x_coords),
-                        y=0.5,
+                        x=0.5,  # Center horizontally on the plot
+                        y=0.95,  # Position at the very top of the plot
                         text=f"<b>Route:</b> {route_text}",
                         showarrow=False,
-                        font=dict(size=10, color=color),
-                        bgcolor="rgba(255,255,255,0.9)",
+                        font=dict(size=11, color=color, family="Arial"),
+                        bgcolor="rgba(255,255,255,0.95)",
                         bordercolor=color,
                         borderwidth=1,
+                        xanchor='center',  # Center the text horizontally
+                        yanchor='top',     # Anchor to top
+                        xref='paper',      # Use relative positioning
+                        yref='paper',      # Use relative positioning
                         row=subplot_row, col=1
                     )
             
-            # Add truck info box
+            # Add truck info box - positioned above the line
             truck_info = trucks_df[trucks_df['truck_id'] == truck_id].iloc[0]
             truck_cost = truck_info['cost']
             truck_capacity = truck_info['capacity']
@@ -401,7 +420,7 @@ class VisualizationManager:
             info_text = f"Cost: €{truck_cost:.0f} | Capacity: {truck_capacity:.0f}m³ | Utilization: {utilization:.1f}%"
             fig.add_annotation(
                 x=0.02,
-                y=0.02,
+                y=0.4,  # Position above the line
                 text=info_text,
                 showarrow=False,
                 font=dict(size=9),
@@ -413,11 +432,12 @@ class VisualizationManager:
                 row=subplot_row, col=1
             )
         
-        # Update layout for all subplots with total distance in title
+        # Update layout for all subplots - removed total cost/distance from title
         fig.update_layout(
             height=280 * n_trucks,  # Slightly more height for better visibility
-            title_text=f"🚛 Vehicle Routes - Total Distance: {total_distance:.1f} km",
-            title_x=0.5,
+            title_text="🚛 Vehicle Routes",
+            title_x=0.5,  # Center the title
+            title_xanchor='center',  # Ensure center alignment
             title_font=dict(size=16, color='darkblue'),
             showlegend=False,
             hovermode='closest'
@@ -476,18 +496,7 @@ class VisualizationManager:
             yaxis=dict(range=[0, max(cost_values) * 1.15])
         )
         
-        # Add total cost annotation
-        total_cost = sum(cost_values)
-        fig.add_annotation(
-            text=f"Total Cost: €{total_cost:.0f}",
-            x=0.5, y=0.95,
-            xref="paper", yref="paper",
-            showarrow=False,
-            font=dict(size=14, color="black"),
-            bgcolor="white",
-            bordercolor="black",
-            borderwidth=1
-        )
+        # Removed total cost annotation as requested
         
         return fig
     

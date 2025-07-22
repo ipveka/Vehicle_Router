@@ -19,6 +19,7 @@ sys.path.insert(0, str(project_root))
 from vehicle_router.data_generator import DataGenerator
 from vehicle_router.optimizer import VrpOptimizer
 from vehicle_router.enhanced_optimizer import EnhancedVrpOptimizer
+from vehicle_router.genetic_optimizer import GeneticVrpOptimizer
 from vehicle_router.validation import SolutionValidator
 from vehicle_router.plotting import plot_routes, plot_costs, plot_utilization
 
@@ -71,7 +72,7 @@ class DataManager:
         self.distance_matrix = None
     
     def generate_data(self, use_example_data: bool = True, random_seed: Optional[int] = None, 
-                     depot_location: str = '08020') -> bool:
+                     depot_location: str = '08020', use_real_distances: bool = False) -> bool:
         """
         Generate input data for the optimization problem
         
@@ -79,6 +80,7 @@ class DataManager:
             use_example_data (bool): Whether to use example data
             random_seed (Optional[int]): Random seed for data generation
             depot_location (str): Depot location postal code
+            use_real_distances (bool): Whether to use real-world distances
             
         Returns:
             bool: True if data generation successful, False otherwise
@@ -117,7 +119,8 @@ class DataManager:
                 postal_codes.append(depot_location)
                 self.logger.info(f"Added depot location {depot_location} to postal codes")
                 
-            self.distance_matrix = self.data_generator.generate_distance_matrix(postal_codes)
+            self.distance_matrix = self.data_generator.generate_distance_matrix(
+                postal_codes, use_real_distances=use_real_distances)
             
             if self.distance_matrix.empty:
                 self.logger.error("Failed to generate distance matrix")
@@ -207,7 +210,7 @@ class OptimizationManager:
                 self.logger.info("Solving optimization problem...")
                 success = self.optimizer.solve()
                 
-            else:
+            elif optimizer_type == 'enhanced':
                 # Initialize enhanced optimizer with new parameters
                 depot_return = config.get('depot_return', True)  # Default True for enhanced
                 
@@ -234,6 +237,44 @@ class OptimizationManager:
                 timeout = config.get('solver_timeout', 120)
                 self.logger.info(f"Solving optimization problem (timeout: {timeout}s)...")
                 success = self.optimizer.solve(timeout=timeout)
+                
+            elif optimizer_type == 'genetic':
+                # Initialize genetic algorithm optimizer
+                depot_return = config.get('depot_return', False)  # Default False for genetic
+                
+                self.logger.info("Using genetic algorithm optimizer (evolutionary approach)")
+                self.logger.info(f"Depot return: {depot_return}")
+                
+                self.optimizer = GeneticVrpOptimizer(
+                    orders_df, trucks_df, distance_matrix,
+                    depot_location=depot_location,
+                    depot_return=depot_return
+                )
+                
+                # Set genetic algorithm parameters
+                population_size = config.get('ga_population', 50)
+                max_generations = config.get('ga_generations', 100)
+                mutation_rate = config.get('ga_mutation', 0.1)
+                
+                self.optimizer.set_parameters(
+                    population_size=population_size,
+                    max_generations=max_generations,
+                    mutation_rate=mutation_rate
+                )
+                
+                # Set fixed objective weights (0.5/0.5 for genetic algorithm)
+                self.optimizer.set_objective_weights(cost_weight=0.5, distance_weight=0.5)
+                self.logger.info("Objective weights: cost=0.5, distance=0.5 (fixed for GA)")
+                self.logger.info(f"GA parameters: population={population_size}, generations={max_generations}, mutation={mutation_rate}")
+                
+                # Solve optimization problem with timeout
+                timeout = config.get('solver_timeout', 120)
+                self.logger.info(f"Solving optimization problem (timeout: {timeout}s)...")
+                success = self.optimizer.solve(timeout=timeout)
+                
+            else:
+                self.logger.error(f"Unknown optimizer type: {optimizer_type}")
+                return False
             
             if not success:
                 self.logger.error("Optimization failed - no solution found")
@@ -531,11 +572,11 @@ class ResultsManager:
     def format_solution_output(self, solution: Dict[str, Any], optimizer_type: str, 
                               depot_location: str, optimizer) -> str:
         """
-        Format the solution for console output
+        Format the solution for console output in comparison-style format
         
         Args:
             solution: Optimization solution dictionary
-            optimizer_type: Type of optimizer used (standard or enhanced)
+            optimizer_type: Type of optimizer used (standard, enhanced, genetic)
             depot_location: Depot postal code
             optimizer: The optimizer instance
             
@@ -545,57 +586,101 @@ class ResultsManager:
         if not solution:
             return "No solution available"
         
-        # Use the optimizer's built-in summary method if available
-        if hasattr(optimizer, 'get_solution_summary_text'):
-            return optimizer.get_solution_summary_text()
+        # Method name mapping
+        method_names = {
+            'standard': 'Standard MILP + Greedy',
+            'enhanced': 'Enhanced MILP', 
+            'genetic': 'Genetic Algorithm'
+        }
         
-        # Fallback formatting
-        if optimizer_type == "standard":
-            title = "=== VEHICLE ROUTER SOLUTION (STANDARD OPTIMIZER) ==="
-        else:
-            title = "=== VEHICLE ROUTER SOLUTION (ENHANCED OPTIMIZER) ==="
-            
-        lines = [title]
-        lines.append(f"Depot Location: {depot_location}")
+        method_name = method_names.get(optimizer_type, optimizer_type.title())
         
-        # Selected trucks
+        lines = []
+        lines.append("=" * 60)
+        lines.append("🏆 VEHICLE ROUTER OPTIMIZATION RESULT")
+        lines.append("=" * 60)
+        
+        # Configuration summary
+        lines.append("\n📊 CONFIGURATION:")
+        lines.append(f"  Method: {method_name}")
+        lines.append(f"  Depot Location: {depot_location}")
+        
+        # Get execution time if available
+        if hasattr(optimizer, 'solve_time'):
+            lines.append(f"  Execution Time: {optimizer.solve_time:.2f}s")
+        
+        # Main results summary
+        lines.append("\n🎯 SOLUTION SUMMARY:")
+        lines.append("-" * 40)
+        
         selected_trucks = solution['selected_trucks']
-        lines.append(f"\nSelected Trucks: {selected_trucks}")
-        
-        # Cost information
         total_cost = solution['costs']['total_cost']
-        lines.append(f"Total Cost: €{total_cost:.2f}")
         
-        # Distance information (enhanced model only)
-        if optimizer_type == "enhanced" and 'total_distance' in solution['costs']:
+        # Calculate total distance
+        total_distance = 0
+        if 'routes_df' in solution and not solution['routes_df'].empty:
+            total_distance = solution['routes_df']['route_distance'].sum()
+        elif 'total_distance' in solution.get('costs', {}):
             total_distance = solution['costs']['total_distance']
-            lines.append(f"Total Distance: {total_distance:.2f} km")
         
-        # Truck assignments and routes
-        lines.append("\nTruck Assignments and Routes:")
+        lines.append(f"✅ SUCCESS: {len(selected_trucks)} trucks, €{total_cost:.0f}, {total_distance:.1f} km")
+        
+        # Key metrics
+        lines.append("\n📈 KEY METRICS:")
+        lines.append("-" * 30)
+        lines.append(f"💰 Total Cost: €{total_cost:.0f}")
+        lines.append(f"📏 Total Distance: {total_distance:.1f} km")
+        lines.append(f"🚚 Trucks Used: {len(selected_trucks)}")
+        
+        # Calculate orders delivered
+        orders_delivered = len(solution.get('assignments_df', []))
+        lines.append(f"📦 Orders Delivered: {orders_delivered}")
+        
+        # Calculate average utilization
+        if 'utilization' in solution:
+            avg_utilization = sum(util['utilization_percent'] for util in solution['utilization'].values()) / len(solution['utilization'])
+            lines.append(f"📊 Average Utilization: {avg_utilization:.1f}%")
+        
+        # Method-specific metrics
+        if optimizer_type == 'enhanced' and hasattr(optimizer, 'objective_value'):
+            lines.append(f"🎯 Multi-Objective Value: {optimizer.objective_value:.6f}")
+        elif optimizer_type == 'genetic' and hasattr(optimizer, 'best_solution'):
+            if hasattr(optimizer, 'generation'):
+                lines.append(f"🧬 GA Generations: {optimizer.generation}")
+            if optimizer.best_solution:
+                lines.append(f"🏅 GA Final Fitness: {optimizer.best_solution.fitness:.6f}")
+        
+        # Detailed truck assignments and routes
+        lines.append("\n🔬 DETAILED RESULTS:")
+        lines.append("-" * 40)
+        
         for truck_id in selected_trucks:
             # Get assigned orders
             assigned_orders = []
-            for _, row in solution['assignments_df'].iterrows():
-                if row['truck_id'] == truck_id:
-                    assigned_orders.append(row['order_id'])
+            if 'assignments_df' in solution:
+                for _, row in solution['assignments_df'].iterrows():
+                    if row['truck_id'] == truck_id:
+                        assigned_orders.append(row['order_id'])
             
-            lines.append(f"  Truck {truck_id}: {assigned_orders}")
+            lines.append(f"\n🚛 Truck {truck_id}: {len(assigned_orders)} orders → {assigned_orders}")
             
-            # Add route information for enhanced model
-            if optimizer_type == "enhanced" and 'routes_df' in solution:
-                for _, route in solution['routes_df'].iterrows():
-                    if route['truck_id'] == truck_id:
-                        if 'route_sequence' in route and route['route_sequence'] is not None:
-                            route_str = " → ".join(route['route_sequence'])
-                            route_distance = route.get('route_distance', 0)
-                            lines.append(f"    Route: {route_str}")
-                            lines.append(f"    Distance: {route_distance:.2f} km")
-        
-        # Utilization
-        lines.append("\nTruck Utilization:")
-        for truck_id, util in solution['utilization'].items():
-            lines.append(f"  Truck {truck_id}: {util['used_volume']:.1f}/{util['capacity']:.1f} m³ ({util['utilization_percent']:.1f}%)")
+            # Add route information
+            if 'routes_df' in solution and not solution['routes_df'].empty:
+                truck_routes = solution['routes_df'][solution['routes_df']['truck_id'] == truck_id]
+                if not truck_routes.empty:
+                    route_info = truck_routes.iloc[0]
+                    route_sequence = route_info.get('route_sequence', [])
+                    route_distance = route_info.get('route_distance', 0)
+                    
+                    if route_sequence:
+                        route_str = " → ".join(map(str, route_sequence))
+                        lines.append(f"   📍 Route: {route_str}")
+                        lines.append(f"   📏 Distance: {route_distance:.1f} km")
+            
+            # Add utilization information
+            if 'utilization' in solution and truck_id in solution['utilization']:
+                util = solution['utilization'][truck_id]
+                lines.append(f"   📦 Utilization: {util['used_volume']:.1f}/{util['capacity']:.1f} m³ ({util['utilization_percent']:.1f}%)")
         
         return "\n".join(lines)
     

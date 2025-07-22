@@ -226,38 +226,34 @@ class DataGenerator:
         
         return trucks_df
     
-    def generate_distance_matrix(self, postal_codes: List[str]) -> pd.DataFrame:
+    def generate_distance_matrix(self, postal_codes: List[str], 
+                                 use_real_distances: bool = False) -> pd.DataFrame:
         """
         Generate distance matrix between postal code locations
         
-        For the example data, postal codes are consecutive (08027-08031) and
-        are 1km apart from each other. The distance matrix is symmetric with
-        zeros on the diagonal.
-        
-        For random data, distances are calculated based on postal code differences
-        with 1km spacing assumption.
+        Supports both simulated distances (current behavior) and real-world distances
+        using geocoding and routing APIs.
         
         Args:
             postal_codes (List[str]): List of postal codes to calculate distances for
+            use_real_distances (bool): Whether to use real-world geographic distances
             
         Returns:
             pd.DataFrame: Symmetric distance matrix with postal codes as both
                          index and columns. Values represent distances in km.
                          
+        Methods:
+            - Simulated (default): 1km per postal code unit difference
+            - Real: Pre-computed Barcelona area distances + Haversine fallback
+                         
         Example:
             >>> data_gen = DataGenerator(use_example_data=True)
-            >>> postal_codes = ['08027', '08028', '08029', '08030', '08031']
-            >>> distances = data_gen.generate_distance_matrix(postal_codes)
-            >>> print(distances)
-                   08027  08028  08029  08030  08031
-            08027    0.0    1.0    2.0    3.0    4.0
-            08028    1.0    0.0    1.0    2.0    3.0
-            08029    2.0    1.0    0.0    1.0    2.0
-            08030    3.0    2.0    1.0    0.0    1.0
-            08031    4.0    3.0    2.0    1.1    0.0
+            >>> # Simulated distances (current behavior)
+            >>> distances = data_gen.generate_distance_matrix(['08027', '08028'])
+            >>> # Real-world distances
+            >>> real_distances = data_gen.generate_distance_matrix(['08027', '08028'], 
+            ...                                                   use_real_distances=True)
         """
-        logger.info(f"Starting distance matrix generation for {len(postal_codes)} postal codes...")
-        
         # Input validation
         if not isinstance(postal_codes, list):
             raise TypeError("postal_codes must be a list")
@@ -280,6 +276,25 @@ class DataGenerator:
         n_codes = len(sorted_codes)
         
         logger.info(f"Processing {n_codes} unique postal codes: {sorted_codes}")
+        
+        # Choose distance calculation method
+        if use_real_distances:
+            logger.info("Using real-world distances (Barcelona area + Haversine fallback)")
+            try:
+                # Use real distance calculator
+                from .distance_calculator import DistanceCalculator
+                calculator = DistanceCalculator()
+                return calculator.calculate_distance_matrix(sorted_codes)
+            except ImportError:
+                logger.warning("Real distance calculator not available, falling back to simulated distances")
+                use_real_distances = False
+            except Exception as e:
+                logger.warning(f"Real distance calculation failed: {e}")
+                logger.warning("Falling back to simulated distances")
+                use_real_distances = False
+        
+        # Simulated distance calculation (current behavior)
+        logger.info("Using simulated distances (1km per postal code unit)")
         
         # Initialize distance matrix
         distance_matrix = pd.DataFrame(

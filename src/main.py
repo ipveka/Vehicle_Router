@@ -6,17 +6,19 @@ This is the main entry point for the Vehicle Routing Problem optimization applic
 It orchestrates the complete workflow including data generation, optimization, 
 validation, and visualization with comprehensive logging and error handling.
 
-The application supports two optimization models:
-- Standard Model: Minimizes truck operational costs only
-- Enhanced Model: Minimizes both truck costs and travel distances with depot routing
+The application supports three optimization models:
+- Standard Model: MILP with greedy route optimization  
+- Enhanced Model: Advanced MILP with integrated cost-distance optimization
+- Genetic Model: Evolutionary algorithm for multi-objective optimization
 
 Usage:
-    python src/main.py [--optimizer {standard,enhanced}] [--depot POSTAL_CODE] [options]
+    python src/main.py [--optimizer {standard,enhanced,genetic}] [--depot POSTAL_CODE] [options]
 
 Examples:
-    python src/main.py                                    # Enhanced model with default depot
-    python src/main.py --optimizer standard               # Standard cost-only model
-    python src/main.py --optimizer enhanced --depot 08030 # Enhanced model with specific depot
+    python src/main.py                                    # Standard model (default)
+    python src/main.py --optimizer standard               # Standard MILP + greedy model
+    python src/main.py --optimizer enhanced --depot 08030 # Enhanced MILP model
+    python src/main.py --optimizer genetic                # Genetic algorithm model
 """
 
 import sys
@@ -82,7 +84,8 @@ class VehicleRouterApp:
             if not self.data_manager.generate_data(
                 use_example_data=self.config['use_example_data'],
                 random_seed=self.config.get('random_seed'),
-                depot_location=self.config['depot_location']
+                depot_location=self.config['depot_location'],
+                use_real_distances=self.config.get('use_real_distances', True)
             ):
                 return False
             
@@ -174,20 +177,22 @@ def main():
     parser = argparse.ArgumentParser(description='Vehicle Routing Problem Optimizer')
     
     # Simple options
-    parser.add_argument('--optimizer', choices=['standard', 'enhanced'], default='standard',
+    parser.add_argument('--optimizer', choices=['standard', 'enhanced', 'genetic'], default='standard',
                        help='Optimizer type (default: standard)')
     parser.add_argument('--depot', type=str, default='08020',
                        help='Depot postal code (default: 08020)')
+    parser.add_argument('--real-distances', action='store_true',
+                       help='Use real-world distances via OpenStreetMap (default: simulated)')
     parser.add_argument('--quiet', action='store_true', help='Reduce output verbosity')
     
     args = parser.parse_args()
     
-    # Simple configuration
+    # Configuration based on optimizer type
     config = {
         'optimizer_type': args.optimizer,
         'depot_location': args.depot,
-        'depot_return': True if args.optimizer == 'enhanced' else False,  # Enhanced default True, Standard default False
-        'enable_greedy_routes': True,  # Enable greedy route optimization for standard optimizer
+        'depot_return': False,
+        'enable_greedy_routes': True,
         'cost_weight': 0.6,
         'distance_weight': 0.4,
         'solver_timeout': 120,
@@ -196,7 +201,13 @@ def main():
         'show_plots': False,
         'validation_enabled': True,
         'verbose_output': not args.quiet,
-        'plot_directory': 'output'
+        'plot_directory': 'output',
+        # Genetic algorithm parameters
+        'ga_population': 50,
+        'ga_generations': 100,
+        'ga_mutation': 0.1,
+        # Distance calculation method
+        'use_real_distances': args.real_distances
     }
     
     # Set up logging

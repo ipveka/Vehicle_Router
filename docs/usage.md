@@ -44,7 +44,21 @@ Total Cost: €4000
 
 ## Command Line Interface
 
-The application supports various command-line options for different use cases:
+The application supports various command-line options for different use cases and all three optimization methods:
+
+### Optimization Method Selection
+
+```bash
+# Standard MILP + Greedy (Default - Recommended)
+python src/main.py
+python src/main.py --optimizer standard
+
+# Enhanced MILP (High-quality multi-objective)
+python src/main.py --optimizer enhanced
+
+# Genetic Algorithm (Large-scale evolutionary)
+python src/main.py --optimizer genetic
+```
 
 ### Basic Options
 
@@ -66,6 +80,9 @@ python src/main.py --no-validation
 
 # Reduce output verbosity
 python src/main.py --quiet
+
+# Custom depot location
+python src/main.py --depot 08031
 ```
 
 ### Logging Options
@@ -86,7 +103,7 @@ python src/main.py --random-data --seed 42 --show-plots --log-level DEBUG
 
 ## Programmatic Usage
 
-### Basic Python Integration
+### Method 1: Standard MILP + Greedy (Recommended)
 
 ```python
 from vehicle_router.data_generator import DataGenerator
@@ -99,19 +116,115 @@ orders_df = data_gen.generate_orders()
 trucks_df = data_gen.generate_trucks()
 distance_matrix = data_gen.generate_distance_matrix(orders_df['postal_code'].tolist())
 
-# Optimize
-optimizer = VrpOptimizer(orders_df, trucks_df, distance_matrix)
+# Optimize with hybrid MILP-Greedy approach
+optimizer = VrpOptimizer(orders_df, trucks_df, distance_matrix, 
+                        enable_greedy_routes=True, depot_return=False)
 optimizer.build_model()
 success = optimizer.solve()
 
 if success:
     solution = optimizer.get_solution()
     print(f"Total cost: €{solution['costs']['total_cost']}")
+    print(f"Total distance: {solution['routes_df']['route_distance'].sum():.1f} km")
     
     # Validate solution
     validator = SolutionValidator(solution, orders_df, trucks_df)
     validation_report = validator.validate_solution()
     print(f"Solution valid: {validation_report['is_valid']}")
+```
+
+### Method 2: Enhanced MILP (Multi-Objective)
+
+```python
+from vehicle_router.enhanced_optimizer import EnhancedVrpOptimizer
+
+# Multi-objective optimization
+enhanced_optimizer = EnhancedVrpOptimizer(orders_df, trucks_df, distance_matrix,
+                                         depot_location='08020', depot_return=True)
+enhanced_optimizer.set_objective_weights(cost_weight=0.6, distance_weight=0.4)
+enhanced_optimizer.build_model()
+success = enhanced_optimizer.solve(timeout=120)
+
+if success:
+    solution = enhanced_optimizer.get_solution()
+    print(f"Multi-objective solution:")
+    print(f"  Total cost: €{solution['costs']['total_cost']}")
+    print(f"  Total distance: {solution['costs']['total_distance']:.1f} km")
+    print(f"  Objective weights: {solution['objective_weights']}")
+```
+
+### Method 3: Genetic Algorithm (Large-Scale)
+
+```python
+from vehicle_router.genetic_optimizer import GeneticVrpOptimizer
+
+# Evolutionary optimization
+genetic_optimizer = GeneticVrpOptimizer(orders_df, trucks_df, distance_matrix,
+                                       depot_location='08020', depot_return=True)
+
+# Configure genetic algorithm parameters
+genetic_optimizer.set_parameters(
+    population_size=50,        # 30-100 based on problem size
+    max_generations=100,       # 50-500 based on time budget
+    mutation_rate=0.1,         # 0.05-0.2 based on diversity needs
+    elite_size=5,              # Number of best solutions preserved
+    tournament_size=3          # Tournament selection size
+)
+
+# Set multi-objective weights
+genetic_optimizer.set_objective_weights(cost_weight=0.6, distance_weight=0.4)
+
+# Solve with configurable timeout
+success = genetic_optimizer.solve(timeout=300)
+
+if success:
+    solution = genetic_optimizer.get_solution()
+    print(f"Evolutionary solution:")
+    print(f"  Total cost: €{solution['costs']['total_cost']}")
+    print(f"  Total distance: {solution['costs']['total_distance']:.1f} km")
+    print(f"  Algorithm stats: {solution['algorithm_stats']}")
+```
+
+### Unified Optimization Runner
+
+```python
+from app_utils.optimization_runner import OptimizationRunner
+
+# Use the unified runner for any method
+runner = OptimizationRunner()
+
+# Standard method
+success = runner.run_optimization(
+    orders_df, trucks_df, distance_matrix,
+    optimization_method='standard',
+    solver_timeout=60,
+    enable_greedy_routes=True
+)
+
+# Enhanced method
+success = runner.run_optimization(
+    orders_df, trucks_df, distance_matrix,
+    optimization_method='enhanced',
+    solver_timeout=120,
+    cost_weight=0.6,
+    distance_weight=0.4
+)
+
+# Genetic algorithm method
+success = runner.run_optimization(
+    orders_df, trucks_df, distance_matrix,
+    optimization_method='genetic',
+    solver_timeout=300,
+    population_size=50,
+    max_generations=100,
+    mutation_rate=0.1,
+    cost_weight=0.6,
+    distance_weight=0.4
+)
+
+if success:
+    solution = runner.solution
+    optimization_log = runner.get_log()
 ```
 
 ### Using the Main Application Class
