@@ -68,7 +68,7 @@ class EnhancedVrpOptimizer:
     
     def __init__(self, orders_df: pd.DataFrame, trucks_df: pd.DataFrame, 
                  distance_matrix: pd.DataFrame, depot_location: Optional[str] = None,
-                 depot_return: bool = True):
+                 depot_return: bool = False):
         """
         Initialize the Enhanced VRP Optimizer with problem data
         

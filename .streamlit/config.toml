@@ -1,0 +1,29 @@
+[theme]
+base = "light"
+primaryColor = "#1f77b4"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f0f2f6"
+textColor = "#262730"
+
+[server]
+headless = false
+port = 8501
+
+[browser]
+gatherUsageStats = false
+
+# Vehicle Router App Configuration
+[app.models.standard]
+name = "📊 Standard MILP + Greedy"
+help = "MILP + Greedy optimization"
+enabled = true
+
+[app.models.enhanced]
+name = "🚀 Enhanced MILP"
+help = "Advanced MILP with routing"
+enabled = false
+
+[app.models.genetic]
+name = "🧬 Genetic Algorithm"
+help = "Evolutionary algorithm"
+enabled = true

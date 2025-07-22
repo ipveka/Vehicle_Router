@@ -86,6 +86,25 @@ st.markdown("""
 class VehicleRouterApp:
     """Main Streamlit Application Class for Vehicle Router"""
     
+    # App Configuration - Control which models are available
+    AVAILABLE_MODELS = {
+        'standard': {
+            'name': '📊 Standard MILP + Greedy',
+            'help': 'MILP + Greedy optimization',
+            'enabled': True
+        },
+        'enhanced': {
+            'name': '🚀 Enhanced MILP',
+            'help': 'Advanced MILP with routing',
+            'enabled': False
+        },
+        'genetic': {
+            'name': '🧬 Genetic Algorithm',
+            'help': 'Evolutionary algorithm',
+            'enabled': True
+        }
+    }
+    
     def __init__(self):
         """Initialize the Streamlit application"""
         self.initialize_session_state()
@@ -130,11 +149,11 @@ class VehicleRouterApp:
             if st.session_state.optimization_complete:
                 self.render_solution_analysis()
                 self.render_visualization()
+                # Documentation section - only available after optimization
+                self.render_documentation_section()
             elif st.session_state.optimization_log:
                 # Show optimization logs if optimization failed
                 self.render_optimization_logs()
-        
-        self.documentation_renderer.render_methodology()
     
     def render_sidebar(self):
         """Render the sidebar with data loading and optimization controls"""
@@ -213,68 +232,108 @@ class VehicleRouterApp:
                 help="Location where trucks start and end their routes"
             )
             
-            st.sidebar.info(f"🏭 **Depot:** {depot_location}")
+
             
-            # Model selection with buttons
+            # Model selection with buttons (based on configuration)
             st.sidebar.markdown("**Model Selection:**")
-            col1, col2 = st.sidebar.columns(2)
-            
-            with col1:
-                standard_button = st.button(
-                    "📊 Standard", 
-                    help="Cost minimization only",
-                    use_container_width=True
-                )
-                
-            with col2:
-                enhanced_button = st.button(
-                    "🚀 Enhanced", 
-                    help="Cost + distance optimization",
-                    use_container_width=True
-                )
             
             # Initialize session state for model selection
-            if 'use_enhanced_model' not in st.session_state:
-                st.session_state.use_enhanced_model = False
-                
-            if standard_button:
-                st.session_state.use_enhanced_model = False
-                st.sidebar.success("📊 Standard Model selected")
-                
-            if enhanced_button:
-                st.session_state.use_enhanced_model = True
-                st.sidebar.success("🚀 Enhanced Model selected")
+            if 'optimization_method' not in st.session_state:
+                # Set default to first enabled model
+                enabled_models = [k for k, v in self.AVAILABLE_MODELS.items() if v['enabled']]
+                st.session_state.optimization_method = enabled_models[0] if enabled_models else 'standard'
+            
+            # Create buttons only for enabled models
+            model_buttons = {}
+            for model_key, model_config in self.AVAILABLE_MODELS.items():
+                if model_config['enabled']:
+                    model_buttons[model_key] = st.sidebar.button(
+                        model_config['name'],
+                        help=model_config['help']
+                    )
+            
+            # Handle button clicks
+            for model_key, button_clicked in model_buttons.items():
+                if button_clicked:
+                    st.session_state.optimization_method = model_key
+                    st.sidebar.success(f"{self.AVAILABLE_MODELS[model_key]['name']} selected")
             
             # Show current model selection
-            if st.session_state.use_enhanced_model:
-                st.sidebar.info("🚀 **Enhanced Model Active**\nMinimizes cost + distance")
+            if hasattr(st.session_state, 'optimization_method'):
+                if st.session_state.optimization_method == 'enhanced':
+                    st.sidebar.info("🚀 **Enhanced MILP Active**\nAdvanced routing optimization")
+                elif st.session_state.optimization_method == 'genetic':
+                    st.sidebar.info("🧬 **Genetic Algorithm Active**\nEvolutionary multi-objective")
+                else:
+                    st.sidebar.info("📊 **Standard MILP Active**\nCost optimization + greedy routes")
             else:
-                st.sidebar.info("📊 **Standard Model Active**\nMinimizes cost only")
+                st.sidebar.info("📊 **Standard MILP Active**\nCost optimization + greedy routes")
             
-            # Objective weights (for enhanced model only)
-            if st.session_state.use_enhanced_model:
-                st.sidebar.markdown("**Objective Weights:**")
-                cost_weight = st.sidebar.slider(
-                    "Cost Weight", 
-                    min_value=0.0, max_value=1.0, value=0.6, step=0.1,
-                    help="Weight for truck costs in objective function"
-                )
-                distance_weight = st.sidebar.slider(
-                    "Distance Weight", 
-                    min_value=0.0, max_value=1.0, value=0.4, step=0.1,
-                    help="Weight for travel distances in objective function"
-                )
-                
-                # Normalize weights to sum to 1
-                total_weight = cost_weight + distance_weight
-                if total_weight > 0:
-                    cost_weight = cost_weight / total_weight
-                    distance_weight = distance_weight / total_weight
-                    st.sidebar.info(f"⚖️ **Weights:** Cost={cost_weight:.2f}, Distance={distance_weight:.2f}")
+            # Method-specific parameters (only show for selected method)
+            if hasattr(st.session_state, 'optimization_method'):
+                if st.session_state.optimization_method == 'enhanced':
+                    st.sidebar.markdown("**🚀 Enhanced MILP Parameters:**")
+                    cost_weight = st.sidebar.slider(
+                        "Cost Weight", 
+                        min_value=0.0, max_value=1.0, value=0.6, step=0.1,
+                        help="Weight for truck costs in objective function"
+                    )
+                    distance_weight = st.sidebar.slider(
+                        "Distance Weight", 
+                        min_value=0.0, max_value=1.0, value=0.4, step=0.1,
+                        help="Weight for travel distances in objective function"
+                    )
+                    
+                    # Normalize weights to sum to 1
+                    total_weight = cost_weight + distance_weight
+                    if total_weight > 0:
+                        cost_weight = cost_weight / total_weight
+                        distance_weight = distance_weight / total_weight
+                        st.sidebar.info(f"⚖️ **Weights:** Cost={cost_weight:.2f}, Distance={distance_weight:.2f}")
+                    
+                    # Default GA values
+                    population_size = 50
+                    max_generations = 100
+                    mutation_rate = 0.1
+                    
+                elif st.session_state.optimization_method == 'genetic':
+                    st.sidebar.markdown("**🧬 Genetic Algorithm Parameters:**")
+                    
+                    # Fixed equal weights for genetic algorithm
+                    cost_weight = 0.5
+                    distance_weight = 0.5
+                    st.sidebar.info("⚖️ **Balanced Optimization:** Cost=50%, Distance=50%")
+                    
+                    population_size = st.sidebar.slider(
+                        "Population Size", 
+                        min_value=20, max_value=100, value=50, step=10,
+                        help="Number of solutions in population"
+                    )
+                    max_generations = st.sidebar.slider(
+                        "Max Generations", 
+                        min_value=50, max_value=300, value=100, step=25,
+                        help="Maximum number of generations"
+                    )
+                    mutation_rate = st.sidebar.slider(
+                        "Mutation Rate", 
+                        min_value=0.05, max_value=0.3, value=0.1, step=0.05,
+                        help="Probability of mutation"
+                    )
+                    
+                else:  # Standard method
+                    # Default values for standard model
+                    cost_weight = 1.0
+                    distance_weight = 0.0
+                    population_size = 50
+                    max_generations = 100
+                    mutation_rate = 0.1
             else:
-                # Default values for standard model
+                # Default values when no method selected
                 cost_weight = 1.0
                 distance_weight = 0.0
+                population_size = 50
+                max_generations = 100
+                mutation_rate = 0.1
             
             # Advanced Options
             st.sidebar.markdown("**Advanced Options:**")
@@ -282,33 +341,20 @@ class VehicleRouterApp:
             # Depot return option
             depot_return = st.sidebar.checkbox(
                 "Trucks Return to Depot", 
-                value=st.session_state.use_enhanced_model,  # Default True for enhanced, False for standard
+                value=False,  # Default to False for all methods
                 help="Whether trucks must return to depot after completing deliveries"
             )
             
-            # Greedy route optimization (only for standard model)
-            if not st.session_state.use_enhanced_model:
-                enable_greedy_routes = st.sidebar.checkbox(
-                    "Enable Greedy Route Optimization", 
-                    value=True,
-                    help="Apply greedy algorithm to optimize route sequences after MILP optimization"
-                )
-            else:
-                enable_greedy_routes = False  # Not applicable for enhanced model
+            # Greedy route optimization always enabled
+            enable_greedy_routes = True
             
             # Solver parameters
             st.sidebar.markdown("**Solver Parameters:**")
             solver_timeout = st.sidebar.slider(
                 "Solver Timeout (seconds)", 
                 min_value=30, max_value=600, 
-                value=120 if st.session_state.use_enhanced_model else 60,
+                value=60 if (hasattr(st.session_state, 'optimization_method') and st.session_state.optimization_method == 'standard') else 300,
                 help="Maximum time allowed for optimization (enhanced model needs more time)"
-            )
-            
-            enable_validation = st.sidebar.checkbox(
-                "Enable Solution Validation", 
-                value=True,
-                help="Validate the solution for constraint compliance"
             )
             
             # Run optimization button
@@ -319,35 +365,25 @@ class VehicleRouterApp:
                         st.session_state.trucks_df,
                         st.session_state.distance_matrix,
                         solver_timeout=solver_timeout,
-                        enable_validation=enable_validation,
-                        use_enhanced_model=st.session_state.use_enhanced_model,
+                        enable_validation=True,  # Always enable validation
+                        optimization_method=st.session_state.optimization_method,
                         cost_weight=cost_weight,
                         distance_weight=distance_weight,
                         depot_location=depot_location,
                         depot_return=depot_return,
-                        enable_greedy_routes=enable_greedy_routes
+                        enable_greedy_routes=enable_greedy_routes,
+                        population_size=population_size,
+                        max_generations=max_generations,
+                        mutation_rate=mutation_rate
                     )
                     
                     if success:
                         st.session_state.solution = self.optimization_runner.solution
                         st.session_state.optimization_log = self.optimization_runner.optimization_log
                         st.session_state.optimization_complete = True
-                        st.session_state.optimizer_type = "enhanced" if st.session_state.use_enhanced_model else "standard"
+                        st.session_state.optimizer_type = st.session_state.optimization_method
                         st.session_state.depot_location = depot_location
                         st.sidebar.success("✅ Optimization completed successfully!")
-                        
-                        # Show solution metrics
-                        if 'costs' in st.session_state.solution:
-                            total_cost = st.session_state.solution['costs']['total_cost']
-                            st.sidebar.info(f"💰 Total Cost: €{total_cost:.0f}")
-                            
-                            if st.session_state.use_enhanced_model and 'total_distance' in st.session_state.solution['costs']:
-                                total_distance = st.session_state.solution['costs']['total_distance']
-                                st.sidebar.info(f"📏 Total Distance: {total_distance:.1f} km")
-                                
-                            # Show truck count
-                            truck_count = len(st.session_state.solution['selected_trucks'])
-                            st.sidebar.info(f"🚚 Trucks Used: {truck_count}")
                     else:
                         st.sidebar.error("❌ Optimization failed")
                         
@@ -360,19 +396,7 @@ class VehicleRouterApp:
                         # Store the logs for display in main area
                         st.session_state.optimization_log = self.optimization_runner.optimization_log
         
-        # Data Status
-        st.sidebar.markdown("### 📈 Status")
-        if st.session_state.data_loaded:
-            st.sidebar.success("✅ Data Loaded")
-            st.sidebar.info(f"Orders: {len(st.session_state.orders_df)}")
-            st.sidebar.info(f"Trucks: {len(st.session_state.trucks_df)}")
-        else:
-            st.sidebar.warning("⚠️ No Data Loaded")
-        
-        if st.session_state.optimization_complete:
-            st.sidebar.success("✅ Optimization Complete")
-        else:
-            st.sidebar.info("⏳ Optimization Pending")
+
     
 
     def render_data_exploration(self):
@@ -477,18 +501,28 @@ class VehicleRouterApp:
         
         solution = st.session_state.solution
         
-        # Solution overview metrics
+        # Solution overview metrics - Updated KPIs as requested
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
             st.metric("Total Cost", f"€{solution['costs']['total_cost']:.0f}")
         with col2:
-            st.metric("Trucks Used", f"{len(solution['selected_trucks'])}/{len(st.session_state.trucks_df)}")
+            total_trucks = len(st.session_state.trucks_df)
+            used_trucks = len(solution['selected_trucks'])
+            st.metric("Trucks Used", f"{used_trucks}/{total_trucks}")
         with col3:
-            st.metric("Orders Delivered", f"{len(solution['assignments_df'])}/{len(st.session_state.orders_df)}")
+            total_orders = len(st.session_state.orders_df)
+            assigned_orders = len(solution['assignments_df'])
+            st.metric("Orders Assigned", f"{assigned_orders}/{total_orders}")
         with col4:
-            avg_util = np.mean([u['utilization_percent'] for u in solution['utilization'].values()])
-            st.metric("Avg Utilization", f"{avg_util:.1f}%")
+            # Calculate total distance from routes_df
+            if 'routes_df' in solution and not solution['routes_df'].empty:
+                total_distance = solution['routes_df']['route_distance'].sum()
+            elif 'total_distance' in solution.get('costs', {}):
+                total_distance = solution['costs']['total_distance']
+            else:
+                total_distance = 0
+            st.metric("Total KM", f"{total_distance:.1f}")
         
         # Solution summary
         st.markdown("### 📋 Solution Summary")
@@ -497,11 +531,33 @@ class VehicleRouterApp:
         **Selected Trucks:** {solution['selected_trucks']}
         """
         
+        # Calculate total distance for summary
+        if 'routes_df' in solution and not solution['routes_df'].empty:
+            total_summary_distance = solution['routes_df']['route_distance'].sum()
+        elif 'total_distance' in solution.get('costs', {}):
+            total_summary_distance = solution['costs']['total_distance']
+        else:
+            total_summary_distance = 0
+        
         for truck_id in solution['selected_trucks']:
             assigned_orders = [a['order_id'] for a in solution['assignments_df'].to_dict('records') if a['truck_id'] == truck_id]
-            summary_text += f"\n- Truck {truck_id} → Orders {assigned_orders}"
+            summary_text += f"\n- **Truck {truck_id}** → Orders {assigned_orders}"
+            
+            # Add route details if available
+            if 'routes_df' in solution and not solution['routes_df'].empty:
+                truck_route = solution['routes_df'][solution['routes_df']['truck_id'] == truck_id]
+                if not truck_route.empty:
+                    route_info = truck_route.iloc[0]
+                    route_sequence = route_info.get('route_sequence', [])
+                    route_distance = route_info.get('route_distance', 0)
+                    
+                    if route_sequence and len(route_sequence) > 1:
+                        route_text = " → ".join(map(str, route_sequence))
+                        summary_text += f"\n  📍 **Route:** {route_text}"
+                        summary_text += f"\n  📏 **Distance:** {route_distance:.1f} km"
         
         summary_text += f"\n\n**Total Cost:** €{solution['costs']['total_cost']:.0f}"
+        summary_text += f"\n**Total Distance:** {total_summary_distance:.1f} km"
         
         st.markdown(summary_text)
         
@@ -612,6 +668,24 @@ class VehicleRouterApp:
                 st.rerun()
         else:
             st.info("No optimization logs available.")
+    
+    def render_documentation_section(self):
+        """Render the documentation section with same style as other main sections"""
+        st.markdown('<h2 class="section-header">📖 Documentation</h2>', unsafe_allow_html=True)
+        
+        # Determine documentation method based on current selection
+        if hasattr(st.session_state, 'optimization_method'):
+            if st.session_state.optimization_method == 'enhanced':
+                doc_method = "enhanced"
+            elif st.session_state.optimization_method == 'genetic':
+                doc_method = "genetic"
+            else:
+                doc_method = "hybrid"  # Standard + Greedy (default)
+        else:
+            doc_method = "hybrid"  # Default to hybrid if not set
+        
+        # Render documentation for the selected method
+        self.documentation_renderer.render_methodology(doc_method)
     
 
 def main():

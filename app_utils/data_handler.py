@@ -51,8 +51,12 @@ class DataHandler:
             self.orders_df = self.data_generator.generate_orders()
             self.trucks_df = self.data_generator.generate_trucks()
             
-            # Generate distance matrix
+            # Generate distance matrix including depot location
             postal_codes = self.orders_df['postal_code'].tolist()
+            # Add depot location if not already in postal codes
+            depot_location = '08020'  # Default depot
+            if depot_location not in postal_codes:
+                postal_codes.append(depot_location)
             self.distance_matrix = self.data_generator.generate_distance_matrix(postal_codes)
             
             return True
@@ -88,8 +92,12 @@ class DataHandler:
             if not self._validate_trucks_data():
                 return False
             
-            # Generate distance matrix
+            # Generate distance matrix including depot location
             postal_codes = self.orders_df['postal_code'].tolist()
+            # Add depot location if not already in postal codes
+            depot_location = '08020'  # Default depot
+            if depot_location not in postal_codes:
+                postal_codes.append(depot_location)
             self.data_generator = DataGenerator(use_example_data=False)
             self.distance_matrix = self.data_generator.generate_distance_matrix(postal_codes)
             
