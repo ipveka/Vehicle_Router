@@ -113,7 +113,8 @@ class OptimizationComparison:
                 distance_matrix=self.distance_matrix,
                 depot_location=self.config['depot_location'],
                 depot_return=self.config['depot_return'],
-                enable_greedy_routes=True
+                enable_greedy_routes=True,
+                max_orders_per_truck=self.config['max_orders_per_truck']
             )
             
             optimizer.build_model()
@@ -173,7 +174,8 @@ class OptimizationComparison:
                 trucks_df=self.trucks_df,
                 distance_matrix=self.distance_matrix,
                 depot_location=self.config['depot_location'],
-                depot_return=self.config['depot_return']
+                depot_return=self.config['depot_return'],
+                max_orders_per_truck=self.config['max_orders_per_truck']
             )
             
             optimizer.set_objective_weights(
@@ -238,7 +240,8 @@ class OptimizationComparison:
                 trucks_df=self.trucks_df,
                 distance_matrix=self.distance_matrix,
                 depot_location=self.config['depot_location'],
-                depot_return=self.config['depot_return']
+                depot_return=self.config['depot_return'],
+                max_orders_per_truck=self.config['max_orders_per_truck']
             )
             
             optimizer.set_parameters(
@@ -539,6 +542,9 @@ def parse_arguments():
     parser.add_argument('--depot-return', action='store_true',
                        help='Enable depot return (default: False)')
     
+    parser.add_argument('--max-orders-per-truck', type=int, default=3,
+                       help='Maximum number of orders per truck (default: 3)')
+    
     parser.add_argument('--cost-weight', type=float, default=0.6,
                        help='Cost weight for multi-objective methods (default: 0.6)')
     
@@ -578,6 +584,7 @@ def main():
         'timeout': args.timeout,
         'depot_location': args.depot,
         'depot_return': args.depot_return,
+        'max_orders_per_truck': args.max_orders_per_truck,
         'cost_weight': args.cost_weight,
         'distance_weight': args.distance_weight,
         'ga_population': args.ga_population,

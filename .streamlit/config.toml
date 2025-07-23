@@ -29,8 +29,8 @@ description = "Multi-objective MILP with simultaneous cost-distance optimization
 help = "Globally optimal multi-objective solutions. Higher computational cost."
 enabled = false  # Hidden by default - advanced users only
 default_depot_return = false
-default_cost_weight = 0.6
-default_distance_weight = 0.4
+default_cost_weight = 0.5
+default_distance_weight = 0.5
 
 [app.models.genetic]
 name = "🧬 Genetic Algorithm"
@@ -41,12 +41,12 @@ default_depot_return = false
 default_population_size = 50
 default_max_generations = 100
 default_mutation_rate = 0.1
-fixed_cost_weight = 0.5  # Fixed balanced weighting
+fixed_cost_weight = 0.5 
 fixed_distance_weight = 0.5
 
 # Distance calculation configuration
 [app.distances]
-default_method = "simulated"  # Options: "simulated" or "real_world"
+default_method = "real_world"  # Options: "simulated" or "real_world"
 simulated_description = "Mathematical approximation: 1km per postal code unit difference"
 real_world_description = "OpenStreetMap geocoding + Haversine great-circle distance calculation"
 geocoding_provider = "openstreetmap"
@@ -59,12 +59,17 @@ cache_enabled = true
 auto_load_example_data = false
 show_progress_indicators = true
 enable_solution_validation = true
-default_solver_timeout = 60
-max_solver_timeout = 300
+
+# Solver timeout configuration (in seconds)
+[app.solver_timeouts]
+standard_milp = 60      # Fast cost optimization
+genetic_algorithm = 300 # Evolutionary optimization needs more time
+enhanced_milp = 300     # Complex routing model
+default_timeout = 300   # Conservative default
 
 # UI customization
 [app.ui]
-show_method_documentation = true  # Show documentation after optimization
+show_method_documentation = true
 show_distance_heatmap = true
 show_route_visualizations = true
 enable_excel_export = true

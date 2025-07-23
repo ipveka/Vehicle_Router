@@ -8,19 +8,27 @@ A comprehensive Python application for solving Vehicle Routing Problems (VRP) us
 - **Real-World Distance Integration**: OpenStreetMap geocoding with Haversine calculations for accurate geographic routing
 - **Interactive Web Interface**: Streamlit app with real-time distance matrix updates and visual analysis
 - **Command-Line Tools**: CLI scripts for automation, batch processing, and method comparison
-- **Comprehensive Analysis**: Solution validation, performance metrics, and multi-method comparison
-- **Flexible Configuration**: Customizable models, parameters, and distance calculation methods
+- **Solution Analysis**: Solution validation, performance metrics, and multi-method comparison
+- **Flexible Configuration**: Customizable models, parameters, distance calculation methods, and order limits per truck
 - **Advanced Visualizations**: Route maps, cost breakdowns, capacity utilization, and distance heatmaps
+- **Enhanced Logging**: Session-based logging with performance tracking, automatic rotation, and detailed audit trails
 
 ## 📊 Optimization Methods
 
-### 1. **Standard MILP + Greedy** *(Default)*
+### **🔒 Production Constraint: Maximum Orders per Truck**
+All optimization methods now enforce a **maximum of 3 orders per truck** constraint to ensure realistic driver workloads and efficient route management. This constraint:
+- **Improves Route Quality**: Prevents overloaded trucks with too many stops
+- **Enhances Driver Experience**: Manageable number of deliveries per route
+- **Maintains Service Quality**: Shorter routes with fewer stops reduce delivery time variability
+- **Configurable**: Adjustable from 1-10 orders per truck via CLI (`--max-orders-per-truck`) or Streamlit interface
+
+### 1. **Standard MILP + Greedy** *(Simple)*
 - **Approach**: Two-phase hybrid optimization combining cost-optimal truck selection with route sequence optimization
-- **Phase 1**: Mixed Integer Linear Programming for minimum-cost truck selection
+- **Phase 1**: Mixed Integer Linear Programming for minimum-cost truck selection with order limit constraints
 - **Phase 2**: Exhaustive permutation testing to find optimal route sequences (tests all route combinations)
 - **Best for**: Balanced cost-distance optimization, daily operations, quick results
 - **Performance**: Fast execution (< 5s), cost-optimal truck selection with distance-optimized routes
-- **Scalability**: Excellent for typical distributions (≤8 orders per truck, handles 40,320 permutations efficiently)
+- **Scalability**: Excellent for typical distributions (≤3 orders per truck constraint enhances performance)
 
 ### 2. **Enhanced MILP** *(Advanced)*
 - **Approach**: Simultaneous multi-objective optimization balancing cost and distance in a single mathematical model
@@ -40,7 +48,7 @@ A comprehensive Python application for solving Vehicle Routing Problems (VRP) us
 
 ## 🌍 Distance Calculation Methods
 
-### **Simulated Distances** *(Default)*
+### **Simulated Distances** *(Simple)*
 - **Method**: Mathematical calculation based on postal code unit differences (1km per unit)
 - **Advantages**: Instant calculation, no network dependencies, consistent results
 - **Use Cases**: Quick testing, development environments, offline scenarios
@@ -165,6 +173,102 @@ python run_app.py
 - **Method-Specific Documentation**: Detailed explanations shown only after optimization
 - **Solution Comparison**: Built-in tools to compare different methods
 
+### **🖥️ Command-Line Examples**
+
+**Experience the complete Vehicle Router workflow through comprehensive command-line examples.**
+
+```bash
+# Quick start with standard optimization
+python src/main.py
+
+# Advanced optimization with real-world distances
+python src/main.py --optimizer enhanced --real-distances --depot 08025
+
+# Compare all methods with performance analysis
+python src/comparison.py --real-distances --timeout 180
+```
+
+#### **🎯 Why Use the Command-Line Interface?**
+
+**Production Ready**: The CLI tools are designed for integration into production workflows, automation scripts, and batch processing scenarios.
+
+**Comprehensive Analysis**: Run all three algorithms (Standard MILP + Greedy, Enhanced MILP, and Genetic Algorithm) with detailed performance comparisons and real-world distance integration.
+
+**Real-World Integration**: Experience the dramatic difference between simulated distances (mathematical approximation) and real-world distances (OpenStreetMap geocoding). See how geographic accuracy improves route optimization by 20-40%.
+
+#### **📚 What You'll Master:**
+
+**🔬 Core Optimization Concepts:**
+- **Vehicle Routing Problem (VRP)**: Understand the mathematical foundation and real-world applications
+- **Multi-Objective Optimization**: Learn how to balance competing goals (cost vs. distance)
+- **Constraint Satisfaction**: See how capacity limits and feasibility requirements shape solutions
+
+**⚙️ Practical Implementation Skills:**
+- **Method Selection**: Discover when to use each optimization approach based on problem characteristics
+- **Parameter Tuning**: Configure population size, generations, weights, and timeouts for optimal results
+- **Performance Analysis**: Understand trade-offs between execution time, solution quality, and scalability
+
+**🌍 Real-World Applications:**
+- **Geographic Integration**: Convert postal codes to coordinates and calculate actual travel distances
+- **API Integration**: Work with OpenStreetMap's Nominatim service for geocoding
+- **Production Considerations**: Handle rate limiting, caching, and fallback mechanisms
+
+#### **🚀 Learning Journey:**
+
+**Phase 1: Quick Start (2 minutes)**
+```bash
+python src/main.py
+```
+- Generate realistic order and truck data
+- Understand problem constraints and feasibility
+- Get optimal solution with standard optimization
+
+**Phase 2: Advanced Optimization (5 minutes)**
+```bash
+python src/main.py --optimizer enhanced --real-distances
+python src/main.py --optimizer genetic --real-distances
+```
+- Execute Enhanced MILP for globally optimal multi-objective balance  
+- Deploy Genetic Algorithm for evolutionary exploration of solution space
+
+**Phase 3: Comprehensive Analysis (8 minutes)**
+```bash
+python src/comparison.py --real-distances --timeout 180
+```
+- Compare all three methods side-by-side
+- Analyze performance across cost, distance, and execution time
+- Get detailed recommendations for different scenarios
+
+**Phase 4: Production Deployment (5 minutes)**
+- Integrate with existing systems using programmatic API
+- Configure logging and monitoring for production use
+- Apply best practices for large-scale deployment
+
+#### **💡 Key Learning Outcomes:**
+
+**Strategic Understanding**: You'll understand not just *how* each method works, but *when* and *why* to use each approach. Standard MILP + Greedy for daily operations, Enhanced MILP for high-quality routes, and Genetic Algorithm for large-scale problems.
+
+**Technical Proficiency**: Gain hands-on experience with mathematical optimization, evolutionary algorithms, and geographic data processing that you can apply to your own routing challenges.
+
+**Performance Intuition**: Develop an intuitive understanding of the trade-offs between solution quality, computational time, and scalability that's essential for real-world applications.
+
+#### **📊 Rich Analysis & Reporting:**
+
+The CLI tools generate comprehensive analysis that brings the optimization results to life:
+- **Detailed Console Output**: Real-time progress and performance metrics
+- **CSV Export**: Structured data for further analysis and integration
+- **Visual Analysis**: Automatic generation of route maps and performance charts
+- **Comprehensive Logging**: Detailed logs for debugging and monitoring
+
+#### **⏱️ Flexible Usage:**
+
+- **Quick Testing** (2 minutes): `python src/main.py` for immediate results
+- **Method Comparison** (5-10 minutes): `python src/comparison.py` for comprehensive analysis
+- **Production Integration**: Use programmatic API for system integration
+- **Batch Processing**: Configure for automated optimization workflows
+
+**Transform Theory into Expertise**: These command-line tools bridge the gap between understanding optimization concepts and implementing production-ready solutions that can save businesses thousands of euros in operational costs.
+
 ### **Command-Line Interface**
 
 **Main Optimization Script:**
@@ -172,31 +276,39 @@ python run_app.py
 # Quick optimization with default settings
 python src/main.py
 
-# Genetic algorithm with real-world distances
-python src/main.py --optimizer genetic --real-distances
+# Genetic algorithm with real-world distances and increased order limit
+python src/main.py --optimizer genetic --real-distances --max-orders-per-truck 5
 
-# Enhanced MILP with custom depot location
+# Enhanced MILP with custom depot location and default order limit
 python src/main.py --optimizer enhanced --depot 08025 --real-distances
+
+# Standard optimization with strict order limit
+python src/main.py --optimizer standard --max-orders-per-truck 2
 
 # Available options:
 # --optimizer: standard, enhanced, genetic (default: standard)
-# --depot: depot postal code (default: 08020) 
+# --depot: depot postal code (default: 08020)
+# --max-orders-per-truck: maximum orders per truck (default: 3)
 # --real-distances: use OpenStreetMap distances (default: simulated)
 # --quiet: reduce output verbosity
 ```
 
 **Method Comparison Script:**
 ```bash
-# Compare all methods with simulated distances
+# Compare all methods with simulated distances and default order limit
 python src/comparison.py
 
-# Compare with real-world distances and timeout
-python src/comparison.py --real-distances --timeout 60
+# Compare with real-world distances, custom order limit, and timeout
+python src/comparison.py --real-distances --max-orders-per-truck 4 --timeout 60
 
-# Quick comparison with minimal output
-python src/comparison.py --real-distances --timeout 30 --quiet
+# Quick comparison with strict order limit
+python src/comparison.py --max-orders-per-truck 2 --timeout 30 --quiet
+
+# Production comparison with balanced settings
+python src/comparison.py --real-distances --max-orders-per-truck 3 --depot-return
 
 # Additional options:
+# --max-orders-per-truck: maximum orders per truck (default: 3)
 # --ga-population: genetic algorithm population size (default: 50)
 # --ga-generations: maximum generations (default: 100)
 # --ga-mutation: mutation rate (default: 0.1)
@@ -232,8 +344,11 @@ real_distance_matrix = data_gen.generate_distance_matrix(
     use_real_distances=True
 )
 
-# Standard MILP + Greedy optimization
-optimizer = VrpOptimizer(orders_df, trucks_df, distance_matrix)
+# Standard MILP + Greedy optimization with order limit constraint
+optimizer = VrpOptimizer(
+    orders_df, trucks_df, distance_matrix,
+    max_orders_per_truck=3  # Production constraint
+)
 success = optimizer.solve()
 
 if success:
@@ -242,8 +357,11 @@ if success:
     print(f"Total distance: {solution['total_distance']:.1f} km")
     print(f"Selected trucks: {solution['selected_trucks']}")
 
-# Genetic Algorithm optimization
-ga_optimizer = GeneticVrpOptimizer(orders_df, trucks_df, real_distance_matrix)
+# Genetic Algorithm optimization with increased order limit
+ga_optimizer = GeneticVrpOptimizer(
+    orders_df, trucks_df, real_distance_matrix,
+    max_orders_per_truck=5  # Allow more orders for large-scale optimization
+)
 ga_optimizer.set_parameters(population_size=50, max_generations=100, mutation_rate=0.1)
 ga_success = ga_optimizer.solve(timeout=120)
 
@@ -251,6 +369,7 @@ if ga_success:
     ga_solution = ga_optimizer.get_solution()
     print(f"GA total cost: €{ga_solution['total_cost']}")
     print(f"GA total distance: {ga_solution['total_distance']:.1f} km")
+    print(f"Max orders per truck constraint satisfied")
 ```
 
 ## 📁 Project Architecture
@@ -279,7 +398,11 @@ Vehicle_Router/
 │   └── plotting.py                 # Visualization utilities
 ├── docs/                           # Comprehensive documentation
 │   ├── methods.md                  # Detailed methodology explanations
-│   └── usage.md                    # Complete usage guide with examples
+│   ├── usage.md                    # Complete usage guide with examples
+│   └── logging.md                  # Logging system documentation
+├── logs/                           # Application log files  
+│   ├── main/                      # CLI application logs with performance tracking
+│   └── app/                       # Streamlit session-based logs
 ├── .streamlit/                     # Streamlit configuration
 │   └── config.toml                # App settings and model configuration
 ├── requirements.txt                # Python dependencies
@@ -336,17 +459,20 @@ calculator = DistanceCalculator(country_code="DE")  # Germany
 **Standard MILP + Greedy:**
 - `depot_return`: Whether trucks return to depot (default: False)
 - `enable_greedy_routes`: Enable route sequence optimization (default: True)
+- `max_orders_per_truck`: Maximum orders per truck (default: 3)
 - `solver_timeout`: CBC solver timeout in seconds (default: 60)
 
 **Enhanced MILP:**
 - `cost_weight`: Weight for truck costs (0-1, default: 0.6)
 - `distance_weight`: Weight for travel distances (0-1, default: 0.4)
+- `max_orders_per_truck`: Maximum orders per truck (default: 3)
 - `solver_timeout`: Extended timeout for complex model (default: 120)
 
 **Genetic Algorithm:**
 - `population_size`: Number of solutions per generation (default: 50)
 - `max_generations`: Maximum evolution iterations (default: 100)
 - `mutation_rate`: Probability of solution mutation (default: 0.1)
+- `max_orders_per_truck`: Maximum orders per truck (default: 3)
 - `cost_weight` / `distance_weight`: Fixed at 0.5/0.5 for balanced optimization
 
 ## 🧪 Testing & Validation
@@ -371,6 +497,7 @@ python src/comparison.py --real-distances --timeout 30 --quiet
 
 - **[Methodology Guide](docs/methods.md)**: Detailed explanations of all three optimization approaches
 - **[Usage Examples](docs/usage.md)**: Comprehensive usage guide with code examples
+- **[Logging System](docs/logging.md)**: Complete logging and monitoring documentation
 - **[API Documentation](vehicle_router/)**: Core module and class documentation
 
 ## 🤝 Contributing

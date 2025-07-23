@@ -24,36 +24,32 @@ from vehicle_router.validation import SolutionValidator
 from vehicle_router.plotting import plot_routes, plot_costs, plot_utilization
 
 
-def setup_logging(log_level: str = "INFO", log_file: Optional[str] = None) -> None:
+def setup_logging(log_level: str = "INFO", log_file: Optional[str] = None) -> logging.Logger:
     """
-    Set up comprehensive logging configuration
+    Set up comprehensive logging configuration using enhanced logger
     
     Args:
         log_level (str): Logging level (DEBUG, INFO, WARNING, ERROR)
-        log_file (Optional[str]): Optional log file path
+        log_file (Optional[str]): Optional log file path (deprecated - use logger_config)
+        
+    Returns:
+        logging.Logger: Configured logger instance
     """
-    # Create logs directory if it doesn't exist
-    logs_dir = project_root / "logs"
-    logs_dir.mkdir(exist_ok=True)
+    # Import the new enhanced logging
+    from vehicle_router.logger_config import setup_main_logging, log_system_info
     
-    # Configure logging format
-    log_format = '[%(levelname)s] %(asctime)s - %(name)s - %(message)s'
-    date_format = '%Y-%m-%d %H:%M:%S'
-    
-    # Set up logging configuration
-    logging.basicConfig(
-        level=getattr(logging, log_level.upper()),
-        format=log_format,
-        datefmt=date_format,
-        handlers=[
-            logging.StreamHandler(sys.stdout),  # Console output
-            logging.FileHandler(log_file or logs_dir / "vehicle_router.log")  # File output
-        ]
+    # Set up enhanced logging for main application
+    logger = setup_main_logging(
+        log_level=log_level,
+        log_to_file=True,
+        log_to_console=True,
+        enable_performance_tracking=True
     )
     
-    # Set specific logger levels to reduce noise
-    logging.getLogger('matplotlib').setLevel(logging.WARNING)
-    logging.getLogger('PIL').setLevel(logging.WARNING)
+    # Log system information for debugging
+    log_system_info(logger)
+    
+    return logger
 
 
 class DataManager:
@@ -199,7 +195,8 @@ class OptimizationManager:
                     orders_df, trucks_df, distance_matrix,
                     depot_location=depot_location,
                     depot_return=depot_return,
-                    enable_greedy_routes=enable_greedy_routes
+                    enable_greedy_routes=enable_greedy_routes,
+                    max_orders_per_truck=config.get('max_orders_per_truck', 3)
                 )
                 
                 # Build MILP model
@@ -220,7 +217,8 @@ class OptimizationManager:
                 self.optimizer = EnhancedVrpOptimizer(
                     orders_df, trucks_df, distance_matrix, 
                     depot_location=depot_location,
-                    depot_return=depot_return
+                    depot_return=depot_return,
+                    max_orders_per_truck=config.get('max_orders_per_truck', 3)
                 )
                 
                 # Set objective weights
@@ -248,7 +246,8 @@ class OptimizationManager:
                 self.optimizer = GeneticVrpOptimizer(
                     orders_df, trucks_df, distance_matrix,
                     depot_location=depot_location,
-                    depot_return=depot_return
+                    depot_return=depot_return,
+                    max_orders_per_truck=config.get('max_orders_per_truck', 3)
                 )
                 
                 # Set genetic algorithm parameters

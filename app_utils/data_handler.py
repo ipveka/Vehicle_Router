@@ -59,7 +59,7 @@ class DataHandler:
                 postal_codes.append(depot_location)
             
             # Check if real distances should be used (from session state or config)
-            use_real_distances = getattr(st.session_state, 'use_real_distances', False)
+            use_real_distances = getattr(st.session_state, 'use_real_distances', True)
             
             self.distance_matrix = self.data_generator.generate_distance_matrix(
                 postal_codes, use_real_distances=use_real_distances)
@@ -105,7 +105,7 @@ class DataHandler:
                 postal_codes.append(depot_location)
             
             # Check if real distances should be used (from session state or config)
-            use_real_distances = getattr(st.session_state, 'use_real_distances', False)
+            use_real_distances = getattr(st.session_state, 'use_real_distances', True)
             
             self.data_generator = DataGenerator(use_example_data=False)
             self.distance_matrix = self.data_generator.generate_distance_matrix(
@@ -238,7 +238,7 @@ class DataHandler:
                 postal_codes.append(depot_location)
             
             # Check if real distances should be used (from session state)
-            use_real_distances = getattr(st.session_state, 'use_real_distances', False)
+            use_real_distances = getattr(st.session_state, 'use_real_distances', True)
             
             # Ensure data generator exists
             if self.data_generator is None:

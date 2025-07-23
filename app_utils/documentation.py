@@ -22,8 +22,6 @@ class DocumentationRenderer:
     
     def render_introduction(self):
         """Render the application introduction section"""
-        st.title("🚛 Vehicle Router Optimizer")
-        
         col1, col2 = st.columns([2, 1])
         
         with col1:
@@ -87,22 +85,7 @@ class DocumentationRenderer:
             </div>
             """, unsafe_allow_html=True)
         
-        # Quick start guide (only when no data loaded)
-        if not st.session_state.data_loaded:
-            st.markdown("""
-            <div class="warning-box">
-                <h4>🚀 Quick Start Guide</h4>
-                <ol>
-                    <li><strong>Load Data:</strong> Click "Load Example Data" in the sidebar or upload your own CSV files</li>
-                    <li><strong>Choose Distance Method:</strong> Toggle "🌍 Use Real-World Distances" for geographic accuracy (optional)</li>
-                    <li><strong>Select Method:</strong> Choose Standard MILP + Greedy (default) or Genetic Algorithm</li>
-                    <li><strong>Configure:</strong> Adjust method-specific parameters (optional - defaults work well)</li>
-                    <li><strong>Optimize:</strong> Click "🚀 Run Optimization" to solve the routing problem</li>
-                    <li><strong>Analyze:</strong> Review results in Solution Analysis and Visualization sections</li>
-                </ol>
-                <p><strong>💡 Tip:</strong> Start with Standard MILP + Greedy and simulated distances for fastest results!</p>
-            </div>
-            """, unsafe_allow_html=True)
+
     
     def render_methodology(self, selected_method: str = "standard"):
         """Render methodology documentation for the selected optimization method"""

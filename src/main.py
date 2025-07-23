@@ -25,6 +25,8 @@ import sys
 import time
 import argparse
 import logging
+import glob
+import os
 from pathlib import Path
 from typing import Dict, Any
 
@@ -54,12 +56,17 @@ class VehicleRouterApp:
     
     def __init__(self, config: Dict[str, Any]):
         """Initialize the Vehicle Router Application"""
-        # Set up logging
-        setup_logging()
-        self.logger = logging.getLogger(__name__)
+        # Set up enhanced logging
+        self.logger = setup_logging(
+            log_level=config.get('log_level', 'INFO')
+        )
         
         # Validate and store configuration
         self.config = validate_configuration(config)
+        
+        # Log optimization configuration
+        from vehicle_router.logger_config import log_optimization_start
+        log_optimization_start(self.logger, self.config)
         
         # Initialize utility managers
         self.data_manager = DataManager(self.logger)
@@ -68,47 +75,64 @@ class VehicleRouterApp:
         self.visualization_manager = VisualizationManager(self.logger)
         self.results_manager = ResultsManager(self.logger)
         
-        self.logger.info("Vehicle Router Application initialized")
-        self.logger.info(f"Configuration: {self.config}")
+        self.logger.info("🚛 Vehicle Router Application initialized successfully")
+        self.logger.debug(f"📋 Full configuration: {self.config}")
     
     def run(self) -> bool:
         """Execute the complete vehicle routing optimization workflow"""
-        self.logger.info("=" * 60)
-        self.logger.info("STARTING VEHICLE ROUTER OPTIMIZATION WORKFLOW")
-        self.logger.info("=" * 60)
+        self.logger.info("=" * 80)
+        self.logger.info("🚀 STARTING VEHICLE ROUTER OPTIMIZATION WORKFLOW")
+        self.logger.info("=" * 80)
         
-        start_time = time.time()
+        # Start overall timing
+        self.logger.perf.start_timer("Complete Workflow")
         
         try:
             # Step 1: Generate input data
+            self.logger.perf.start_timer("Data Generation")
             if not self.data_manager.generate_data(
                 use_example_data=self.config['use_example_data'],
                 random_seed=self.config.get('random_seed'),
                 depot_location=self.config['depot_location'],
-                use_real_distances=self.config.get('use_real_distances', True)
+                use_real_distances=self.config.get('use_real_distances', False)
             ):
+                self.logger.error("❌ Data generation failed")
                 return False
+            self.logger.perf.end_timer("Data Generation")
+            
+            # Log memory usage after data generation
+            self.logger.perf.log_memory_usage("After data generation")
             
             # Step 2: Run optimization
+            self.logger.perf.start_timer("Optimization")
             if not self.optimization_manager.run_optimization(
                 self.data_manager.orders_df,
                 self.data_manager.trucks_df,
                 self.data_manager.distance_matrix,
                 self.config
             ):
+                self.logger.error("❌ Optimization failed")
                 return False
+            self.logger.perf.end_timer("Optimization")
+            
+            # Log memory usage after optimization
+            self.logger.perf.log_memory_usage("After optimization")
             
             # Step 3: Validate solution
             if self.config['validation_enabled']:
+                self.logger.perf.start_timer("Solution Validation")
                 if not self.validation_manager.validate_solution(
                     self.optimization_manager.solution,
                     self.data_manager.orders_df,
                     self.data_manager.trucks_df
                 ):
+                    self.logger.error("❌ Solution validation failed")
                     return False
+                self.logger.perf.end_timer("Solution Validation")
             
             # Step 4: Generate visualizations
             if self.config['save_plots']:
+                self.logger.perf.start_timer("Visualization Generation")
                 self.visualization_manager.create_visualizations(
                     self.optimization_manager.solution,
                     self.data_manager.orders_df,
@@ -116,29 +140,39 @@ class VehicleRouterApp:
                     self.data_manager.distance_matrix,
                     self.config
                 )
+                self.logger.perf.end_timer("Visualization Generation")
             
             # Step 5: Save results to CSV
+            self.logger.perf.start_timer("Results Export")
             self.results_manager.save_results_to_csv(
                 self.optimization_manager.solution,
                 self.data_manager.orders_df,
                 self.data_manager.trucks_df
             )
+            self.logger.perf.end_timer("Results Export")
             
             # Step 6: Display results
             self._display_results()
             
-            # Calculate total execution time
-            total_time = time.time() - start_time
+            # End overall timing and log completion
+            total_time = self.logger.perf.end_timer("Complete Workflow")
             
-            self.logger.info("=" * 60)
-            self.logger.info(f"WORKFLOW COMPLETED SUCCESSFULLY IN {total_time:.2f} SECONDS")
-            self.logger.info("=" * 60)
+            self.logger.info("=" * 80)
+            self.logger.info(f"✅ WORKFLOW COMPLETED SUCCESSFULLY IN {total_time:.2f} SECONDS")
+            self.logger.info("=" * 80)
+            
+            # Log final memory usage
+            self.logger.perf.log_memory_usage("Workflow Complete")
+            
+            print(f"📄 Detailed logs saved to: logs/main/latest.log")
             
             return True
             
         except Exception as e:
-            self.logger.error(f"Critical error in workflow: {str(e)}")
-            self.logger.error("Workflow failed - check logs for details")
+            self.logger.perf.end_timer("Complete Workflow")
+            self.logger.error("💥 CRITICAL ERROR in workflow:")
+            self.logger.error(f"   Error: {str(e)}")
+            self.logger.exception("   Full traceback:")
             return False
     
     def _display_results(self) -> None:
@@ -170,6 +204,33 @@ class VehicleRouterApp:
             self.logger.error(f"Error displaying results: {str(e)}")
 
 
+def clear_previous_logs():
+    """Clear all previous log files from logs/main directory"""
+    try:
+        log_dir = Path("logs/main")
+        if log_dir.exists():
+            # Get all log files in the directory
+            log_files = list(log_dir.glob("*.log"))
+            
+            if log_files:
+                print(f"🧹 Clearing {len(log_files)} previous log files from logs/main/...")
+                for log_file in log_files:
+                    try:
+                        log_file.unlink()
+                        print(f"   ✅ Deleted: {log_file.name}")
+                    except Exception as e:
+                        print(f"   ⚠️  Could not delete {log_file.name}: {e}")
+                print("   🎯 Log directory cleared!")
+            else:
+                print("📝 No previous log files found in logs/main/")
+        else:
+            print("📁 Creating logs/main directory...")
+            log_dir.mkdir(parents=True, exist_ok=True)
+            
+    except Exception as e:
+        print(f"⚠️  Warning: Could not clear previous logs: {e}")
+
+
 def main():
     """
     Main entry point for the Vehicle Router application
@@ -181,6 +242,8 @@ def main():
                        help='Optimizer type (default: standard)')
     parser.add_argument('--depot', type=str, default='08020',
                        help='Depot postal code (default: 08020)')
+    parser.add_argument('--max-orders-per-truck', type=int, default=3,
+                       help='Maximum number of orders per truck (default: 3)')
     parser.add_argument('--real-distances', action='store_true',
                        help='Use real-world distances via OpenStreetMap (default: simulated)')
     parser.add_argument('--quiet', action='store_true', help='Reduce output verbosity')
@@ -193,6 +256,7 @@ def main():
         'depot_location': args.depot,
         'depot_return': False,
         'enable_greedy_routes': True,
+        'max_orders_per_truck': args.max_orders_per_truck,
         'cost_weight': 0.6,
         'distance_weight': 0.4,
         'solver_timeout': 120,
@@ -202,6 +266,8 @@ def main():
         'validation_enabled': True,
         'verbose_output': not args.quiet,
         'plot_directory': 'output',
+        # Logging configuration
+        'log_level': 'INFO' if not args.quiet else 'WARNING',
         # Genetic algorithm parameters
         'ga_population': 50,
         'ga_generations': 100,
@@ -210,8 +276,8 @@ def main():
         'use_real_distances': args.real_distances
     }
     
-    # Set up logging
-    setup_logging('INFO' if not args.quiet else 'WARNING')
+    # Clear previous logs before starting the application
+    clear_previous_logs()
     
     # Create and run application
     app = VehicleRouterApp(config)
