@@ -13,6 +13,7 @@ Usage:
 import streamlit as st
 import sys
 import os
+import logging
 from pathlib import Path
 import pandas as pd
 import numpy as np
@@ -88,32 +89,104 @@ class VehicleRouterApp:
     
     # App Configuration - Control which models are available
     AVAILABLE_MODELS = {
+        'genetic': {
+            'name': '🧬 Genetic Algorithm',
+            'help': 'Evolutionary multi-objective optimization',
+            'enabled': True
+        },
         'standard': {
-            'name': '📊 Standard MILP + Greedy',
-            'help': 'MILP + Greedy optimization',
+            'name': '📊 Standard MILP',
+            'help': 'Cost optimization with route enhancement',
             'enabled': True
         },
         'enhanced': {
             'name': '🚀 Enhanced MILP',
             'help': 'Advanced MILP with routing',
             'enabled': False
-        },
-        'genetic': {
-            'name': '🧬 Genetic Algorithm',
-            'help': 'Evolutionary algorithm',
-            'enabled': True
         }
     }
     
     def __init__(self):
         """Initialize the Streamlit application"""
+        # Initialize session state first
         self.initialize_session_state()
+        
+        # Set up enhanced logging for Streamlit app
+        self._setup_logging()
+        
+        # Initialize app utilities
         self.data_handler = DataHandler()
         self.optimization_runner = OptimizationRunner()
         self.visualization_manager = VisualizationManager()
         self.export_manager = ExportManager()
         self.ui_components = UIComponents()
         self.documentation_renderer = DocumentationRenderer()
+        
+        self.logger.info("🌐 Streamlit Vehicle Router App initialized successfully")
+    
+    def _validate_max_orders_constraint(self, solution: Dict[str, Any], max_orders_per_truck: int) -> bool:
+        """
+        Validate that the solution respects the maximum orders per truck constraint
+        
+        Args:
+            solution: Optimization solution dictionary
+            max_orders_per_truck: Maximum allowed orders per truck
+            
+        Returns:
+            bool: True if constraint is satisfied, False otherwise
+        """
+        try:
+            # Count orders per truck
+            truck_order_counts = {}
+            for _, assignment in solution['assignments_df'].iterrows():
+                truck_id = assignment['truck_id']
+                if truck_id not in truck_order_counts:
+                    truck_order_counts[truck_id] = 0
+                truck_order_counts[truck_id] += 1
+            
+            # Check if any truck exceeds the limit
+            violations = []
+            for truck_id, order_count in truck_order_counts.items():
+                if order_count > max_orders_per_truck:
+                    violations.append(f"Truck {truck_id}: {order_count} orders (max: {max_orders_per_truck})")
+            
+            if violations:
+                self.logger.error(f"❌ Max orders per truck constraint violations:")
+                for violation in violations:
+                    self.logger.error(f"   {violation}")
+                return False
+            else:
+                self.logger.info(f"✅ Max orders per truck constraint satisfied (limit: {max_orders_per_truck})")
+                for truck_id, order_count in truck_order_counts.items():
+                    self.logger.info(f"   Truck {truck_id}: {order_count} orders")
+                return True
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error validating max orders constraint: {str(e)}")
+            return False
+    
+    def _setup_logging(self):
+        """Set up enhanced logging for Streamlit application"""
+        from vehicle_router.logger_config import setup_app_logging, log_system_info
+        
+        # Generate or retrieve session ID
+        if 'session_id' not in st.session_state:
+            import uuid
+            st.session_state.session_id = str(uuid.uuid4())[:8]
+        
+        # Set up app logging with session ID
+        self.logger = setup_app_logging(
+            session_id=st.session_state.session_id,
+            log_level="INFO",
+            log_to_file=True,
+            log_to_console=False,  # Streamlit handles console output
+            enable_performance_tracking=True
+        )
+        
+        # Log system information on first setup
+        if 'logging_initialized' not in st.session_state:
+            log_system_info(self.logger)
+            st.session_state.logging_initialized = True
     
     def initialize_session_state(self):
         """Initialize Streamlit session state variables"""
@@ -131,11 +204,20 @@ class VehicleRouterApp:
             st.session_state.solution = None
         if 'optimization_log' not in st.session_state:
             st.session_state.optimization_log = []
+        
+        # Pre-select genetic algorithm as default optimization method
+        if 'optimization_method' not in st.session_state:
+            # Set genetic algorithm as the default pre-selected method
+            enabled_models = [k for k, v in self.AVAILABLE_MODELS.items() if v['enabled']]
+            st.session_state.optimization_method = 'genetic' if 'genetic' in enabled_models else (enabled_models[0] if enabled_models else 'standard')
     
     def run(self):
         """Run the complete Streamlit application"""
         # Main header
         st.markdown('<h1 class="main-header">🚛 Vehicle Router Optimizer</h1>', unsafe_allow_html=True)
+        
+        # Handle data loading with progress indication
+        self._handle_data_loading_progress()
         
         # Sidebar
         self.render_sidebar()
@@ -154,6 +236,10 @@ class VehicleRouterApp:
             elif st.session_state.optimization_log:
                 # Show optimization logs if optimization failed
                 self.render_optimization_logs()
+        
+        # Show logs at the end of the page if requested
+        if hasattr(st.session_state, 'show_logs') and st.session_state.show_logs:
+            self.render_log_viewer()
     
     def render_sidebar(self):
         """Render the sidebar with data loading and optimization controls"""
@@ -170,16 +256,9 @@ class VehicleRouterApp:
         
         if data_source == "Example Data":
             if st.sidebar.button("🔄 Load Example Data", type="primary"):
-                with st.spinner("Loading example data..."):
-                    success = self.data_handler.load_example_data()
-                    if success:
-                        st.session_state.orders_df = self.data_handler.orders_df
-                        st.session_state.trucks_df = self.data_handler.trucks_df
-                        st.session_state.distance_matrix = self.data_handler.distance_matrix
-                        st.session_state.data_loaded = True
-                        st.sidebar.success("✅ Example data loaded successfully!")
-                    else:
-                        st.sidebar.error("❌ Failed to load example data")
+                # Set loading state for progress indication
+                st.session_state.loading_data = True
+                st.rerun()
         
         else:
             st.sidebar.markdown("Upload your CSV files:")
@@ -195,16 +274,11 @@ class VehicleRouterApp:
             
             if orders_file and trucks_file:
                 if st.sidebar.button("📤 Load Custom Data", type="primary"):
-                    with st.spinner("Loading custom data..."):
-                        success = self.data_handler.load_custom_data(orders_file, trucks_file)
-                        if success:
-                            st.session_state.orders_df = self.data_handler.orders_df
-                            st.session_state.trucks_df = self.data_handler.trucks_df
-                            st.session_state.distance_matrix = self.data_handler.distance_matrix
-                            st.session_state.data_loaded = True
-                            st.sidebar.success("✅ Custom data loaded successfully!")
-                        else:
-                            st.sidebar.error("❌ Failed to load custom data")
+                    # Store files in session state and set loading flag
+                    st.session_state.orders_file = orders_file
+                    st.session_state.trucks_file = trucks_file
+                    st.session_state.loading_data = True
+                    st.rerun()
         
         # Optimization Section
         if st.session_state.data_loaded:
@@ -235,13 +309,14 @@ class VehicleRouterApp:
             # Real Distances Configuration
             use_real_distances = st.sidebar.checkbox(
                 "🌍 Use Real-World Distances",
-                value=getattr(st.session_state, 'use_real_distances', False),
+                value=getattr(st.session_state, 'use_real_distances', True),
                 help="Use OpenStreetMap geocoding for accurate geographic distances (takes longer but more realistic)"
             )
             
             # Check if distance method changed and reload data if needed
             previous_setting = getattr(st.session_state, 'use_real_distances', False)
             if use_real_distances != previous_setting:
+                self.logger.info(f"🌍 Distance calculation method changed: {previous_setting} → {use_real_distances}")
                 st.session_state.use_real_distances = use_real_distances
                 
                 # Force reload of distance matrix if data is already loaded
@@ -261,46 +336,49 @@ class VehicleRouterApp:
                                 self.data_handler.orders_df = st.session_state.orders_df
                                 self.data_handler.trucks_df = st.session_state.trucks_df
                             
-                            with st.sidebar.status("🔄 Updating distance matrix...", expanded=False):
-                                if self.data_handler.reload_distance_matrix():
-                                    # Update session state with new distance matrix
-                                    st.session_state.distance_matrix = self.data_handler.distance_matrix
-                                    st.rerun()  # Refresh the app to show updated data
-                                else:
-                                    st.sidebar.error("❌ Failed to update distance matrix")
+                            # Set updating flag to show progress at top of page
+                            st.session_state.updating_distances = True
+                            st.session_state.update_use_real_distances = use_real_distances
+                            st.rerun()
                         else:
+                            self.logger.warning("⚠️ No valid order data found. Attempting to reload data...")
                             st.sidebar.warning("⚠️ No valid order data found. Please load data first.")
-                            # Reload the data with new distance setting
-                            st.sidebar.info("🔄 Reloading data with new distance setting...")
-                            if self.data_handler.load_example_data():
-                                st.session_state.orders_df = self.data_handler.orders_df
-                                st.session_state.trucks_df = self.data_handler.trucks_df
-                                st.session_state.distance_matrix = self.data_handler.distance_matrix
-                                st.sidebar.success("✅ Data reloaded with new distance setting!")
-                                st.rerun()
-                            else:
-                                st.sidebar.error("❌ Failed to reload data")
+                            
+                            # Set reload flag to show progress at top of page
+                            st.session_state.reloading_data = True
+                            st.session_state.reload_use_real_distances = use_real_distances
+                            st.rerun()
                                 
                     except Exception as e:
-                        st.sidebar.error(f"❌ Error updating distance matrix: {str(e)}")
-                        import traceback
-                        st.sidebar.error(f"Details: {traceback.format_exc()}")
+                        self.logger.error(f"💥 Error updating distance matrix: {str(e)}")
+                        self.logger.exception("Full traceback:")
+                        # Set error flag to show at top of page
+                        st.session_state.distance_error = str(e)
+                        st.rerun()
             else:
-                # Store in session state for data loading
+                # Store in session state for data loading (default to True for real distances)
                 st.session_state.use_real_distances = use_real_distances
             
-            if use_real_distances:
-                st.sidebar.info("📍 Real distances use OpenStreetMap geocoding + Haversine calculation")
+
+            # Order constraints section (above model parameters)
+            st.sidebar.markdown("**🔒 Order Constraints:**")
+            max_orders_per_truck = st.sidebar.slider(
+                "Max Orders per Truck",
+                min_value=1, max_value=10, value=3, step=1,
+                help="Maximum number of orders that can be assigned to each truck"
+            )
             
+            # Depot return option
+            depot_return = st.sidebar.checkbox(
+                "Trucks Return to Depot", 
+                value=False,  # Default to False for all methods
+                help="Whether trucks must return to depot after completing deliveries"
+            )
             
             # Model selection with buttons (based on configuration)
             st.sidebar.markdown("**Model Selection:**")
             
-            # Initialize session state for model selection
-            if 'optimization_method' not in st.session_state:
-                # Set default to first enabled model
-                enabled_models = [k for k, v in self.AVAILABLE_MODELS.items() if v['enabled']]
-                st.session_state.optimization_method = enabled_models[0] if enabled_models else 'standard'
+            # optimization_method is now pre-initialized in initialize_session_state()
             
             # Create buttons only for enabled models
             model_buttons = {}
@@ -317,16 +395,7 @@ class VehicleRouterApp:
                     st.session_state.optimization_method = model_key
                     st.sidebar.success(f"{self.AVAILABLE_MODELS[model_key]['name']} selected")
             
-            # Show current model selection
-            if hasattr(st.session_state, 'optimization_method'):
-                if st.session_state.optimization_method == 'enhanced':
-                    st.sidebar.info("🚀 **Enhanced MILP Active**\nAdvanced routing optimization")
-                elif st.session_state.optimization_method == 'genetic':
-                    st.sidebar.info("🧬 **Genetic Algorithm Active**\nEvolutionary multi-objective")
-                else:
-                    st.sidebar.info("📊 **Standard MILP Active**\nCost optimization + greedy routes")
-            else:
-                st.sidebar.info("📊 **Standard MILP Active**\nCost optimization + greedy routes")
+
             
             # Method-specific parameters (only show for selected method)
             if hasattr(st.session_state, 'optimization_method'):
@@ -361,7 +430,6 @@ class VehicleRouterApp:
                     # Fixed equal weights for genetic algorithm
                     cost_weight = 0.5
                     distance_weight = 0.5
-                    st.sidebar.info("⚖️ **Balanced Optimization:** Cost=50%, Distance=50%")
                     
                     population_size = st.sidebar.slider(
                         "Population Size", 
@@ -394,31 +462,32 @@ class VehicleRouterApp:
                 max_generations = 100
                 mutation_rate = 0.1
             
-            # Advanced Options
-            st.sidebar.markdown("**Advanced Options:**")
-            
-            # Depot return option
-            depot_return = st.sidebar.checkbox(
-                "Trucks Return to Depot", 
-                value=False,  # Default to False for all methods
-                help="Whether trucks must return to depot after completing deliveries"
-            )
-            
             # Greedy route optimization always enabled
             enable_greedy_routes = True
             
-            # Solver parameters
-            st.sidebar.markdown("**Solver Parameters:**")
-            solver_timeout = st.sidebar.slider(
-                "Solver Timeout (seconds)", 
-                min_value=30, max_value=600, 
-                value=60 if (hasattr(st.session_state, 'optimization_method') and st.session_state.optimization_method == 'standard') else 300,
-                help="Maximum time allowed for optimization (enhanced model needs more time)"
-            )
+            # Set solver timeout based on config.toml and optimization method
+            if hasattr(st.session_state, 'optimization_method'):
+                if st.session_state.optimization_method == 'standard':
+                    solver_timeout = 60  # Fast method
+                elif st.session_state.optimization_method == 'genetic':
+                    solver_timeout = 300  # More time for evolution
+                else:  # enhanced
+                    solver_timeout = 300  # Complex model needs time
+            else:
+                solver_timeout = 300  # Default for genetic (first option)
             
             # Run optimization button
             if st.sidebar.button("🚀 Run Optimization", type="primary"):
                 with st.spinner("Running optimization..."):
+                    self.logger.info("🚀 User initiated optimization")
+                    self.logger.info(f"   Method: {st.session_state.optimization_method}")
+                    self.logger.info(f"   Depot: {depot_location}")
+                    self.logger.info(f"   Real distances: {use_real_distances}")
+                    self.logger.info(f"   Max orders per truck: {max_orders_per_truck}")
+                    self.logger.info(f"   Timeout: {solver_timeout}s (from config)")
+                    
+                    self.logger.perf.start_timer("Complete Optimization")
+                    
                     success = self.optimization_runner.run_optimization(
                         st.session_state.orders_df,
                         st.session_state.trucks_df,
@@ -431,19 +500,56 @@ class VehicleRouterApp:
                         depot_location=depot_location,
                         depot_return=depot_return,
                         enable_greedy_routes=enable_greedy_routes,
+                        max_orders_per_truck=max_orders_per_truck,
                         population_size=population_size,
                         max_generations=max_generations,
                         mutation_rate=mutation_rate
                     )
                     
                     if success:
-                        st.session_state.solution = self.optimization_runner.solution
-                        st.session_state.optimization_log = self.optimization_runner.optimization_log
-                        st.session_state.optimization_complete = True
-                        st.session_state.optimizer_type = st.session_state.optimization_method
-                        st.session_state.depot_location = depot_location
-                        st.sidebar.success("✅ Optimization completed successfully!")
+                        opt_time = self.logger.perf.end_timer("Complete Optimization")
+                        
+                        solution = self.optimization_runner.solution
+                        
+                        # Validate max orders per truck constraint
+                        constraint_satisfied = self._validate_max_orders_constraint(solution, max_orders_per_truck)
+                        
+                        if constraint_satisfied:
+                            st.session_state.solution = solution
+                            st.session_state.optimization_log = self.optimization_runner.optimization_log
+                            st.session_state.optimization_complete = True
+                            st.session_state.optimizer_type = st.session_state.optimization_method
+                            st.session_state.depot_location = depot_location
+                            
+                            # Log success details
+                            self.logger.info(f"✅ Optimization completed successfully in {opt_time:.2f}s")
+                            self.logger.info(f"   Selected trucks: {solution['selected_trucks']}")
+                            self.logger.info(f"   Total cost: €{solution['costs']['total_cost']:.0f}")
+                            self.logger.info(f"   Orders assigned: {len(solution['assignments_df'])}")
+                            
+                            # Log memory usage
+                            self.logger.perf.log_memory_usage("After optimization")
+                            
+                            st.sidebar.success("✅ Optimization completed successfully!")
+                        else:
+                            # Constraint violation detected
+                            self.logger.error("❌ Solution violates max orders per truck constraint")
+                            st.sidebar.error("❌ Solution violates maximum orders per truck constraint!")
+                            st.sidebar.error("Please check the logs for details or try with a higher limit.")
+                            
+                            # Store logs for display
+                            st.session_state.optimization_log = self.optimization_runner.optimization_log
+                            st.session_state.optimization_complete = False
                     else:
+                        self.logger.perf.end_timer("Complete Optimization")
+                        self.logger.error("❌ Optimization failed")
+                        
+                        # Log failure details
+                        if self.optimization_runner.optimization_log:
+                            self.logger.error("   Optimization error logs:")
+                            for log_entry in self.optimization_runner.optimization_log[-5:]:
+                                self.logger.error(f"     {log_entry}")
+                        
                         st.sidebar.error("❌ Optimization failed")
                         
                         # Show optimization logs for debugging
@@ -455,6 +561,64 @@ class VehicleRouterApp:
                         # Store the logs for display in main area
                         st.session_state.optimization_log = self.optimization_runner.optimization_log
         
+            # Log Management Section - at the end of sidebar
+            st.sidebar.markdown("---")
+            st.sidebar.markdown("**📋 Log Management:**")
+            
+            col1, col2 = st.sidebar.columns(2)
+            
+            with col1:
+                if st.button("📖 View Logs", key="view_logs_btn"):
+                    self._show_logs_modal()
+            
+            with col2:
+                if st.button("🗑️ Clear Logs", key="clear_logs_btn"):
+                    self._clear_logs()
+
+    def _show_logs_modal(self):
+        """Display logs in an expandable section in the main area"""
+        st.session_state.show_logs = True
+        st.rerun()
+    
+    def _clear_logs(self):
+        """Clear all log files from logs/app directory"""
+        try:
+            import glob
+            from pathlib import Path
+            
+            # Clear app logs
+            app_log_dir = Path("logs/app")
+            log_files_cleared = 0
+            
+            if app_log_dir.exists():
+                log_files = list(app_log_dir.glob("*.log"))
+                for log_file in log_files:
+                    try:
+                        log_file.unlink()
+                        log_files_cleared += 1
+                    except Exception as e:
+                        self.logger.warning(f"Could not delete {log_file.name}: {e}")
+            
+            # Clear main logs too
+            main_log_dir = Path("logs/main")
+            if main_log_dir.exists():
+                log_files = list(main_log_dir.glob("*.log"))
+                for log_file in log_files:
+                    try:
+                        log_file.unlink()
+                        log_files_cleared += 1
+                    except Exception as e:
+                        self.logger.warning(f"Could not delete {log_file.name}: {e}")
+            
+            if log_files_cleared > 0:
+                st.sidebar.success(f"✅ Cleared {log_files_cleared} log files!")
+                self.logger.info(f"🧹 User cleared {log_files_cleared} log files")
+            else:
+                st.sidebar.info("📝 No log files found to clear")
+                
+        except Exception as e:
+            st.sidebar.error(f"❌ Error clearing logs: {str(e)}")
+            self.logger.error(f"Error clearing logs: {str(e)}")
 
     
 
@@ -703,6 +867,328 @@ class VehicleRouterApp:
                 )
                 st.plotly_chart(fig, use_container_width=True)
     
+    def _handle_data_loading_progress(self):
+        """Handle data loading and distance matrix updates with progress bar at the top of the page"""
+        # Handle distance matrix update
+        if hasattr(st.session_state, 'updating_distances') and st.session_state.updating_distances:
+            progress_container = st.container()
+            
+            with progress_container:
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                use_real_distances = st.session_state.update_use_real_distances
+                
+                if use_real_distances:
+                    status_text.text("🌍 Calculating real-world distances using OpenStreetMap...")
+                else:
+                    status_text.text("📐 Calculating simulated distances...")
+                
+                progress_bar.progress(30)
+                
+                # Copy session state data to data handler if needed
+                if (hasattr(st.session_state, 'orders_df') and 
+                    st.session_state.orders_df is not None):
+                    self.data_handler.orders_df = st.session_state.orders_df
+                    self.data_handler.trucks_df = st.session_state.trucks_df
+                
+                self.logger.perf.start_timer("Distance Matrix Reload")
+                
+                if self.data_handler.reload_distance_matrix():
+                    progress_bar.progress(80)
+                    reload_time = self.logger.perf.end_timer("Distance Matrix Reload")
+                    
+                    # Update session state with new distance matrix
+                    st.session_state.distance_matrix = self.data_handler.distance_matrix
+                    
+                    method_desc = "real-world distances (OpenStreetMap + Haversine)" if use_real_distances else "simulated distances"
+                    self.logger.info(f"✅ Distance matrix updated successfully in {reload_time:.2f}s")
+                    self.logger.info(f"   Method: {method_desc}")
+                    
+                    progress_bar.progress(100)
+                    status_text.success(f"✅ Updated to {method_desc}!")
+                    
+                    # Clean up session state
+                    del st.session_state.updating_distances
+                    del st.session_state.update_use_real_distances
+                    
+                    # Brief pause then refresh
+                    import time
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    self.logger.perf.end_timer("Distance Matrix Reload")
+                    self.logger.error("❌ Failed to update distance matrix")
+                    progress_bar.progress(100)
+                    status_text.error("❌ Failed to update distance matrix")
+                    
+                    # Clean up session state
+                    del st.session_state.updating_distances
+                    del st.session_state.update_use_real_distances
+            return
+        
+        # Handle data reloading with new distance setting
+        if hasattr(st.session_state, 'reloading_data') and st.session_state.reloading_data:
+            progress_container = st.container()
+            
+            with progress_container:
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                use_real_distances = st.session_state.reload_use_real_distances
+                
+                if use_real_distances:
+                    status_text.text("🔄 Reloading data with real-world distances...")
+                else:
+                    status_text.text("🔄 Reloading data with simulated distances...")
+                
+                progress_bar.progress(20)
+                
+                self.logger.perf.start_timer("Data Reload with New Distance Setting")
+                
+                if self.data_handler.load_example_data():
+                    progress_bar.progress(60)
+                    
+                    if use_real_distances:
+                        status_text.text("🌍 Calculating real-world distances using OpenStreetMap...")
+                    else:
+                        status_text.text("📐 Calculating simulated distances...")
+                    
+                    progress_bar.progress(85)
+                    reload_time = self.logger.perf.end_timer("Data Reload with New Distance Setting")
+                    
+                    st.session_state.orders_df = self.data_handler.orders_df
+                    st.session_state.trucks_df = self.data_handler.trucks_df
+                    st.session_state.distance_matrix = self.data_handler.distance_matrix
+                    
+                    method_desc = "real-world distances (OpenStreetMap)" if use_real_distances else "simulated distances"
+                    self.logger.info(f"✅ Data reloaded with {method_desc} in {reload_time:.2f}s")
+                    
+                    progress_bar.progress(100)
+                    status_text.success(f"✅ Data reloaded with {method_desc}!")
+                    
+                    # Clean up session state
+                    del st.session_state.reloading_data
+                    del st.session_state.reload_use_real_distances
+                    
+                    # Brief pause then refresh
+                    import time
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    self.logger.perf.end_timer("Data Reload with New Distance Setting")
+                    self.logger.error("❌ Failed to reload data")
+                    progress_bar.progress(100)
+                    status_text.error("❌ Failed to reload data")
+                    
+                    # Clean up session state
+                    del st.session_state.reloading_data
+                    del st.session_state.reload_use_real_distances
+            return
+        
+        # Handle distance calculation errors
+        if hasattr(st.session_state, 'distance_error') and st.session_state.distance_error:
+            progress_container = st.container()
+            
+            with progress_container:
+                progress_bar = st.progress(100)
+                status_text = st.empty()
+                
+                status_text.error(f"❌ Error updating distance matrix: {st.session_state.distance_error}")
+                
+                # Clean up session state after showing error
+                del st.session_state.distance_error
+            return
+        
+        # Handle initial data loading
+        if hasattr(st.session_state, 'loading_data') and st.session_state.loading_data:
+            # Create progress bar container at the top
+            progress_container = st.container()
+            
+            with progress_container:
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                # Check if loading example data or custom data
+                if hasattr(st.session_state, 'orders_file') and hasattr(st.session_state, 'trucks_file'):
+                    # Loading custom data
+                    status_text.text("📤 Loading custom data...")
+                    progress_bar.progress(10)
+                    
+                    self.logger.info("📊 User initiated custom data loading")
+                    self.logger.perf.start_timer("Custom Data Loading")
+                    
+                    success = self.data_handler.load_custom_data(
+                        st.session_state.orders_file, 
+                        st.session_state.trucks_file
+                    )
+                    progress_bar.progress(50)
+                    
+                    if success:
+                        status_text.text("🌍 Calculating distances...")
+                        progress_bar.progress(70)
+                        
+                        # Check if real distances are enabled
+                        use_real_distances = getattr(st.session_state, 'use_real_distances', True)
+                        if use_real_distances:
+                            status_text.text("🌍 Calculating real-world distances using OpenStreetMap...")
+                        else:
+                            status_text.text("📐 Calculating simulated distances...")
+                        
+                        progress_bar.progress(90)
+                        
+                        st.session_state.orders_df = self.data_handler.orders_df
+                        st.session_state.trucks_df = self.data_handler.trucks_df
+                        st.session_state.distance_matrix = self.data_handler.distance_matrix
+                        st.session_state.data_loaded = True
+                        
+                        load_time = self.logger.perf.end_timer("Custom Data Loading")
+                        self.logger.info(f"✅ Custom data loaded successfully in {load_time:.2f}s")
+                        self.logger.info(f"   Orders: {len(st.session_state.orders_df)}, Trucks: {len(st.session_state.trucks_df)}")
+                        
+                        progress_bar.progress(100)
+                        status_text.success("✅ Custom data loaded successfully!")
+                        
+                        # Clean up session state
+                        del st.session_state.orders_file
+                        del st.session_state.trucks_file
+                        del st.session_state.loading_data
+                        
+                        # Brief pause to show completion, then rerun
+                        import time
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        self.logger.perf.end_timer("Custom Data Loading")
+                        self.logger.error("❌ Failed to load custom data")
+                        progress_bar.progress(100)
+                        status_text.error("❌ Failed to load custom data")
+                        del st.session_state.loading_data
+                        if hasattr(st.session_state, 'orders_file'):
+                            del st.session_state.orders_file
+                        if hasattr(st.session_state, 'trucks_file'):
+                            del st.session_state.trucks_file
+                else:
+                    # Loading example data
+                    status_text.text("📊 Loading example data...")
+                    progress_bar.progress(20)
+                    
+                    self.logger.info("📊 User initiated example data loading")
+                    self.logger.perf.start_timer("Example Data Loading")
+                    
+                    success = self.data_handler.load_example_data()
+                    progress_bar.progress(60)
+                    
+                    if success:
+                        status_text.text("🌍 Calculating distances...")
+                        progress_bar.progress(80)
+                        
+                        # Check if real distances are enabled
+                        use_real_distances = getattr(st.session_state, 'use_real_distances', True)
+                        if use_real_distances:
+                            status_text.text("🌍 Calculating real-world distances using OpenStreetMap...")
+                        else:
+                            status_text.text("📐 Calculating simulated distances...")
+                        
+                        progress_bar.progress(95)
+                        
+                        st.session_state.orders_df = self.data_handler.orders_df
+                        st.session_state.trucks_df = self.data_handler.trucks_df
+                        st.session_state.distance_matrix = self.data_handler.distance_matrix
+                        st.session_state.data_loaded = True
+                        
+                        load_time = self.logger.perf.end_timer("Example Data Loading")
+                        self.logger.info(f"✅ Example data loaded successfully in {load_time:.2f}s")
+                        self.logger.info(f"   Orders: {len(st.session_state.orders_df)}, Trucks: {len(st.session_state.trucks_df)}")
+                        
+                        progress_bar.progress(100)
+                        status_text.success("✅ Example data loaded successfully!")
+                        
+                        # Clean up session state
+                        del st.session_state.loading_data
+                        
+                        # Brief pause to show completion, then rerun
+                        import time
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        self.logger.perf.end_timer("Example Data Loading")
+                        self.logger.error("❌ Failed to load example data")
+                        progress_bar.progress(100)
+                        status_text.error("❌ Failed to load example data")
+                        del st.session_state.loading_data
+
+    def render_log_viewer(self):
+        """Render the log viewer section to display all log files"""
+        st.markdown('<h2 class="section-header">📋 Log Viewer</h2>', unsafe_allow_html=True)
+        
+        col1, col2 = st.columns([4, 1])
+        
+        with col2:
+            if st.button("❌ Close Logs", key="close_logs_btn"):
+                st.session_state.show_logs = False
+                st.rerun()
+        
+        try:
+            from pathlib import Path
+            import os
+            
+            # Get all log directories
+            log_base_dir = Path("logs")
+            log_dirs = ["app", "main"]
+            
+            for log_dir_name in log_dirs:
+                log_dir = log_base_dir / log_dir_name
+                
+                if log_dir.exists():
+                    log_files = sorted(list(log_dir.glob("*.log")), key=lambda x: x.stat().st_mtime, reverse=True)
+                    
+                    if log_files:
+                        st.markdown(f"### 📁 {log_dir_name.title()} Logs")
+                        
+                        # Show log files in tabs
+                        if len(log_files) == 1:
+                            # Single file - no tabs needed
+                            log_file = log_files[0]
+                            st.markdown(f"**📄 {log_file.name}**")
+                            try:
+                                with open(log_file, 'r', encoding='utf-8') as f:
+                                    content = f.read()
+                                    if content.strip():
+                                        st.code(content, language="text")
+                                    else:
+                                        st.info("Log file is empty.")
+                            except Exception as e:
+                                st.error(f"Could not read {log_file.name}: {str(e)}")
+                        else:
+                            # Multiple files - use tabs
+                            tab_names = [f.name for f in log_files[:5]]  # Limit to 5 most recent
+                            tabs = st.tabs(tab_names)
+                            
+                            for i, (tab, log_file) in enumerate(zip(tabs, log_files[:5])):
+                                with tab:
+                                    try:
+                                        with open(log_file, 'r', encoding='utf-8') as f:
+                                            content = f.read()
+                                            if content.strip():
+                                                # Show file info
+                                                file_size = log_file.stat().st_size / 1024  # KB
+                                                mod_time = log_file.stat().st_mtime
+                                                st.caption(f"Size: {file_size:.1f} KB | Modified: {os.path.basename(log_file.name)}")
+                                                st.code(content, language="text")
+                                            else:
+                                                st.info("Log file is empty.")
+                                    except Exception as e:
+                                        st.error(f"Could not read {log_file.name}: {str(e)}")
+                    else:
+                        st.info(f"No log files found in {log_dir_name}/ directory.")
+                else:
+                    st.info(f"Log directory {log_dir_name}/ does not exist.")
+                    
+        except Exception as e:
+            st.error(f"Error loading log files: {str(e)}")
+            self.logger.error(f"Error in log viewer: {str(e)}")
+
     def render_optimization_logs(self):
         """Render the optimization logs section when optimization fails"""
         st.markdown('<h2 class="section-header">🔍 Optimization Logs</h2>', unsafe_allow_html=True)
@@ -731,6 +1217,11 @@ class VehicleRouterApp:
     def render_documentation_section(self):
         """Render the documentation section with same style as other main sections"""
         st.markdown('<h2 class="section-header">📖 Documentation</h2>', unsafe_allow_html=True)
+        
+        # Log documentation access
+        if hasattr(st.session_state, 'optimization_method'):
+            method = st.session_state.optimization_method
+            self.logger.info(f"📖 User accessing documentation for {method} method")
         
         # Determine documentation method based on current selection
         if hasattr(st.session_state, 'optimization_method'):

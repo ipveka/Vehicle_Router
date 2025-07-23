@@ -95,7 +95,7 @@ class GeneticVrpOptimizer:
     
     def __init__(self, orders_df: pd.DataFrame, trucks_df: pd.DataFrame, 
                  distance_matrix: pd.DataFrame, depot_location: Optional[str] = None,
-                 depot_return: bool = False):
+                 depot_return: bool = False, max_orders_per_truck: int = 3):
         """
         Initialize the Genetic Algorithm VRP Optimizer
         
@@ -105,6 +105,7 @@ class GeneticVrpOptimizer:
             distance_matrix (pd.DataFrame): Distance matrix between postal codes
             depot_location (Optional[str]): Depot postal code. If None, uses '08020'.
             depot_return (bool): Whether trucks must return to depot after deliveries.
+            max_orders_per_truck (int): Maximum number of orders per truck. Default 3.
             
         Raises:
             ValueError: If input data is invalid or inconsistent
@@ -132,6 +133,11 @@ class GeneticVrpOptimizer:
                 raise ValueError(f"Depot location '{depot_location}' not found in distance matrix")
         
         self.depot_return = depot_return
+        
+        # Validate and store max orders per truck constraint
+        if max_orders_per_truck < 1:
+            raise ValueError("max_orders_per_truck must be at least 1")
+        self.max_orders_per_truck = max_orders_per_truck
         
         # Extract problem data
         self.orders = self.orders_df['order_id'].tolist()
@@ -164,6 +170,7 @@ class GeneticVrpOptimizer:
         logger.info(f"Genetic optimizer initialized:")
         logger.info(f"  Orders: {len(self.orders)}, Trucks: {len(self.trucks)}")
         logger.info(f"  Depot: {self.depot_location}, Return: {self.depot_return}")
+        logger.info(f"  Maximum orders per truck: {self.max_orders_per_truck}")
         logger.info(f"  Population size: {self.population_size}")
         logger.info(f"  Max generations: {self.max_generations}")
     
@@ -454,29 +461,50 @@ class GeneticVrpOptimizer:
     
     def _repair_solution(self, solution: Solution) -> Solution:
         """Repair solution to ensure feasibility"""
-        # Check capacity constraints
+        # Check capacity and max orders constraints
         truck_loads = {truck_id: 0 for truck_id in self.trucks}
-        violations = []
+        truck_order_counts = {truck_id: 0 for truck_id in self.trucks}
+        capacity_violations = []
+        order_count_violations = []
         
         for order_id, truck_id in solution.assignments.items():
             volume = self.order_volumes[order_id]
             truck_loads[truck_id] += volume
+            truck_order_counts[truck_id] += 1
             
             if truck_loads[truck_id] > self.truck_capacities[truck_id]:
-                violations.append(order_id)
+                capacity_violations.append(order_id)
+            
+            if truck_order_counts[truck_id] > self.max_orders_per_truck:
+                order_count_violations.append(order_id)
+        
+        # Combine all violations (remove duplicates)
+        all_violations = list(set(capacity_violations + order_count_violations))
         
         # Reassign violating orders
-        for order_id in violations:
+        for order_id in all_violations:
             volume = self.order_volumes[order_id]
             old_truck = solution.assignments[order_id]
             truck_loads[old_truck] -= volume
+            truck_order_counts[old_truck] -= 1
             
-            # Find a truck with enough capacity
+            # Find a truck with enough capacity and order slot
+            assigned = False
             for truck_id in self.trucks:
-                if truck_loads[truck_id] + volume <= self.truck_capacities[truck_id]:
+                if (truck_loads[truck_id] + volume <= self.truck_capacities[truck_id] and
+                    truck_order_counts[truck_id] < self.max_orders_per_truck):
                     solution.assignments[order_id] = truck_id
                     truck_loads[truck_id] += volume
+                    truck_order_counts[truck_id] += 1
+                    assigned = True
                     break
+            
+            # If no suitable truck found, assign to truck with minimum load (emergency repair)
+            if not assigned:
+                best_truck = min(self.trucks, key=lambda x: truck_loads[x])
+                solution.assignments[order_id] = best_truck
+                truck_loads[best_truck] += volume
+                truck_order_counts[best_truck] += 1
         
         # Update truck usage and routes
         solution.truck_usage = list(set(solution.assignments.values()))
@@ -526,12 +554,21 @@ class GeneticVrpOptimizer:
         if len(solution.assignments) != len(self.orders):
             return False
         
-        # Check capacity constraints
+        # Check capacity constraints and max orders constraints
         truck_loads = {truck_id: 0 for truck_id in self.trucks}
+        truck_order_counts = {truck_id: 0 for truck_id in self.trucks}
+        
         for order_id, truck_id in solution.assignments.items():
             volume = self.order_volumes[order_id]
             truck_loads[truck_id] += volume
+            truck_order_counts[truck_id] += 1
+            
+            # Check capacity constraint
             if truck_loads[truck_id] > self.truck_capacities[truck_id]:
+                return False
+            
+            # Check max orders constraint
+            if truck_order_counts[truck_id] > self.max_orders_per_truck:
                 return False
         
         return True

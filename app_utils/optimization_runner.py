@@ -54,6 +54,7 @@ class OptimizationRunner:
                          cost_weight: float = 0.6, distance_weight: float = 0.4,
                          depot_location: str = '08020', depot_return: bool = None,
                          enable_greedy_routes: bool = True,
+                         max_orders_per_truck: int = 3,
                          # Genetic algorithm parameters
                          population_size: int = 50, max_generations: int = 100,
                          mutation_rate: float = 0.1) -> bool:
@@ -72,6 +73,7 @@ class OptimizationRunner:
             depot_location: Depot postal code location
             depot_return: Whether trucks must return to depot (None = use optimizer default)
             enable_greedy_routes: Whether to enable greedy route optimization for standard optimizer
+            max_orders_per_truck: Maximum number of orders per truck (default: 3)
             population_size: Population size for genetic algorithm
             max_generations: Maximum generations for genetic algorithm
             mutation_rate: Mutation rate for genetic algorithm
@@ -93,18 +95,18 @@ class OptimizationRunner:
             if optimization_method == 'enhanced':
                 success = self._run_enhanced_optimization(
                     orders_df, trucks_df, distance_matrix, solver_timeout,
-                    cost_weight, distance_weight, depot_location, depot_return
+                    cost_weight, distance_weight, depot_location, depot_return, max_orders_per_truck
                 )
             elif optimization_method == 'genetic':
                 success = self._run_genetic_optimization(
                     orders_df, trucks_df, distance_matrix, solver_timeout,
-                    cost_weight, distance_weight, depot_location, depot_return,
+                    cost_weight, distance_weight, depot_location, depot_return, max_orders_per_truck,
                     population_size, max_generations, mutation_rate
                 )
             else:  # standard
                 success = self._run_standard_optimization(
                     orders_df, trucks_df, distance_matrix, solver_timeout,
-                    depot_location, depot_return, enable_greedy_routes
+                    depot_location, depot_return, enable_greedy_routes, max_orders_per_truck
                 )
             
             # Validate solution if requested
@@ -135,7 +137,7 @@ class OptimizationRunner:
     def _run_enhanced_optimization(self, orders_df: pd.DataFrame, trucks_df: pd.DataFrame,
                                  distance_matrix: pd.DataFrame, solver_timeout: int,
                                  cost_weight: float, distance_weight: float,
-                                 depot_location: str, depot_return: bool) -> bool:
+                                 depot_location: str, depot_return: bool, max_orders_per_truck: int) -> bool:
         """Run enhanced MILP optimization"""
         self._log("Initializing Enhanced MILP optimizer...")
         
@@ -151,7 +153,8 @@ class OptimizationRunner:
                 trucks_df=trucks_df,
                 distance_matrix=distance_matrix,
                 depot_location=depot_location,
-                depot_return=depot_return
+                depot_return=depot_return,
+                max_orders_per_truck=max_orders_per_truck
             )
             
             # Set objective weights
@@ -180,7 +183,7 @@ class OptimizationRunner:
     def _run_genetic_optimization(self, orders_df: pd.DataFrame, trucks_df: pd.DataFrame,
                                 distance_matrix: pd.DataFrame, solver_timeout: int,
                                 cost_weight: float, distance_weight: float,
-                                depot_location: str, depot_return: bool,
+                                depot_location: str, depot_return: bool, max_orders_per_truck: int,
                                 population_size: int, max_generations: int,
                                 mutation_rate: float) -> bool:
         """Run genetic algorithm optimization"""
@@ -198,7 +201,8 @@ class OptimizationRunner:
                 trucks_df=trucks_df,
                 distance_matrix=distance_matrix,
                 depot_location=depot_location,
-                depot_return=depot_return
+                depot_return=depot_return,
+                max_orders_per_truck=max_orders_per_truck
             )
             
             # Set parameters
@@ -232,7 +236,7 @@ class OptimizationRunner:
     def _run_standard_optimization(self, orders_df: pd.DataFrame, trucks_df: pd.DataFrame,
                                  distance_matrix: pd.DataFrame, solver_timeout: int,
                                  depot_location: str, depot_return: bool,
-                                 enable_greedy_routes: bool) -> bool:
+                                 enable_greedy_routes: bool, max_orders_per_truck: int) -> bool:
         """Run standard MILP optimization"""
         self._log("Initializing Standard MILP optimizer...")
         
@@ -249,7 +253,8 @@ class OptimizationRunner:
                 distance_matrix=distance_matrix,
                 depot_location=depot_location,
                 depot_return=depot_return,
-                enable_greedy_routes=enable_greedy_routes
+                enable_greedy_routes=enable_greedy_routes,
+                max_orders_per_truck=max_orders_per_truck
             )
             
             self._log(f"Greedy route optimization: {'enabled' if enable_greedy_routes else 'disabled'}")

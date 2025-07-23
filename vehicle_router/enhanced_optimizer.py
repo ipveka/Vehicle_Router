@@ -68,7 +68,7 @@ class EnhancedVrpOptimizer:
     
     def __init__(self, orders_df: pd.DataFrame, trucks_df: pd.DataFrame, 
                  distance_matrix: pd.DataFrame, depot_location: Optional[str] = None,
-                 depot_return: bool = False):
+                 depot_return: bool = False, max_orders_per_truck: int = 3):
         """
         Initialize the Enhanced VRP Optimizer with problem data
         
@@ -78,6 +78,7 @@ class EnhancedVrpOptimizer:
             distance_matrix (pd.DataFrame): Distance matrix between postal codes
             depot_location (Optional[str]): Depot postal code. If None, uses first postal code.
             depot_return (bool): Whether trucks must return to depot after deliveries. Default True.
+            max_orders_per_truck (int): Maximum number of orders per truck. Default 3.
             
         Raises:
             ValueError: If input data is invalid or inconsistent
@@ -124,6 +125,12 @@ class EnhancedVrpOptimizer:
         # Depot return option
         self.depot_return = depot_return
         logger.info(f"Depot return enabled: {self.depot_return}")
+        
+        # Validate and store max orders per truck constraint
+        if max_orders_per_truck < 1:
+            raise ValueError("max_orders_per_truck must be at least 1")
+        self.max_orders_per_truck = max_orders_per_truck
+        logger.info(f"Maximum orders per truck: {self.max_orders_per_truck}")
         
         # Extract problem dimensions
         self.orders = self.orders_df['order_id'].tolist()
@@ -264,6 +271,7 @@ class EnhancedVrpOptimizer:
         logger.info("Adding optimization constraints...")
         self._add_order_assignment_constraints()
         self._add_capacity_constraints()
+        self._add_max_orders_constraints()
         self._add_truck_usage_constraints()
         self._add_route_continuity_constraints()
         self._add_depot_constraints()
@@ -412,6 +420,29 @@ class EnhancedVrpOptimizer:
             self.model += volume_sum <= capacity, constraint_name
         
         logger.info(f"Added {len(self.trucks)} capacity constraints")
+    
+    def _add_max_orders_constraints(self) -> None:
+        """
+        Add constraints ensuring no truck exceeds the maximum number of orders
+        
+        For each truck j: sum over all orders i of x[i,j] <= max_orders_per_truck
+        This ensures each truck handles at most the specified number of orders.
+        """
+        logger.info(f"Adding maximum orders per truck constraints (limit: {self.max_orders_per_truck})...")
+        
+        for truck_id in self.trucks:
+            # Sum of assigned orders must not exceed maximum
+            orders_sum = pulp.lpSum([
+                self.decision_vars['x'][(order_id, truck_id)]
+                for order_id in self.orders
+            ])
+            
+            constraint_name = f"max_orders_truck_{truck_id}"
+            self.model += orders_sum <= self.max_orders_per_truck, constraint_name
+            
+            logger.info(f"Added max orders constraint for Truck {truck_id}: max {self.max_orders_per_truck} orders")
+        
+        logger.info(f"Added {len(self.trucks)} maximum orders constraints")
     
     def _add_truck_usage_constraints(self) -> None:
         """
@@ -751,7 +782,8 @@ class EnhancedVrpOptimizer:
                 'cost_weight': self.cost_weight,
                 'distance_weight': self.distance_weight
             },
-            'depot_location': self.depot_location
+            'depot_location': self.depot_location,
+            'objective_value': self.solution_data['objective_value']
         }
         
         logger.info("Enhanced solution data formatted successfully")
