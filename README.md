@@ -458,13 +458,12 @@ calculator = DistanceCalculator(country_code="DE")  # Germany
 
 **Standard MILP + Greedy:**
 - `depot_return`: Whether trucks return to depot (default: False)
-- `enable_greedy_routes`: Enable route sequence optimization (default: True)
 - `max_orders_per_truck`: Maximum orders per truck (default: 3)
 - `solver_timeout`: CBC solver timeout in seconds (default: 60)
 
 **Enhanced MILP:**
-- `cost_weight`: Weight for truck costs (0-1, default: 0.6)
-- `distance_weight`: Weight for travel distances (0-1, default: 0.4)
+- `cost_weight`: Weight for truck costs (0-1, default: 0.5)
+- `distance_weight`: Weight for travel distances (0-1, default: 0.5)
 - `max_orders_per_truck`: Maximum orders per truck (default: 3)
 - `solver_timeout`: Extended timeout for complex model (default: 120)
 
