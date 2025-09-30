@@ -32,12 +32,20 @@ from app_utils.export_manager import ExportManager
 from app_utils.ui_components import UIComponents
 from app_utils.documentation import DocumentationRenderer
 
+# Import configuration
+from app.config import (
+    DEFAULT_ALGORITHM, AVAILABLE_MODELS, UI_CONFIG, OPTIMIZATION_DEFAULTS,
+    METHOD_DEFAULTS, DISTANCE_CONFIG, DEPOT_CONFIG, LOGGING_CONFIG,
+    get_enabled_models, get_model_display_name, is_model_enabled,
+    get_method_defaults, validate_config, get_config_summary
+)
+
 # Configure Streamlit page
 st.set_page_config(
-    page_title="Vehicle Router Optimizer",
-    page_icon="🚛",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    page_title=UI_CONFIG['page_title'],
+    page_icon=UI_CONFIG['page_icon'],
+    layout=UI_CONFIG['layout'],
+    initial_sidebar_state=UI_CONFIG['initial_sidebar_state']
 )
 
 # Custom CSS for better styling
@@ -87,27 +95,21 @@ st.markdown("""
 class VehicleRouterApp:
     """Main Streamlit Application Class for Vehicle Router"""
     
-    # App Configuration - Control which models are available
-    AVAILABLE_MODELS = {
-        'genetic': {
-            'name': '🧬 Genetic Algorithm',
-            'help': 'Evolutionary multi-objective optimization',
-            'enabled': True
-        },
-        'standard': {
-            'name': '📊 Standard MILP',
-            'help': 'Cost optimization with route enhancement',
-            'enabled': True
-        },
-        'enhanced': {
-            'name': '🚀 Enhanced MILP',
-            'help': 'Advanced MILP with routing',
-            'enabled': False
-        }
-    }
-    
     def __init__(self):
         """Initialize the Streamlit application"""
+        # Validate configuration on startup
+        config_issues = validate_config()
+        if config_issues['errors']:
+            st.error("❌ Configuration errors found:")
+            for error in config_issues['errors']:
+                st.error(f"   {error}")
+            st.stop()
+        
+        if config_issues['warnings']:
+            st.warning("⚠️ Configuration warnings:")
+            for warning in config_issues['warnings']:
+                st.warning(f"   {warning}")
+        
         # Initialize session state first
         self.initialize_session_state()
         
@@ -123,6 +125,7 @@ class VehicleRouterApp:
         self.documentation_renderer = DocumentationRenderer()
         
         self.logger.info("🌐 Streamlit Vehicle Router App initialized successfully")
+        self.logger.info(f"📋 Configuration: {get_config_summary()}")
     
     def _validate_max_orders_constraint(self, solution: Dict[str, Any], max_orders_per_truck: int) -> bool:
         """
@@ -205,11 +208,14 @@ class VehicleRouterApp:
         if 'optimization_log' not in st.session_state:
             st.session_state.optimization_log = []
         
-        # Pre-select genetic algorithm as default optimization method
+        # Pre-select default algorithm from configuration
         if 'optimization_method' not in st.session_state:
-            # Set genetic algorithm as the default pre-selected method
-            enabled_models = [k for k, v in self.AVAILABLE_MODELS.items() if v['enabled']]
-            st.session_state.optimization_method = 'genetic' if 'genetic' in enabled_models else (enabled_models[0] if enabled_models else 'standard')
+            # Set default algorithm from configuration
+            enabled_models = get_enabled_models()
+            if DEFAULT_ALGORITHM in enabled_models:
+                st.session_state.optimization_method = DEFAULT_ALGORITHM
+            else:
+                st.session_state.optimization_method = enabled_models[0] if enabled_models else 'standard'
     
     def run(self):
         """Run the complete Streamlit application"""
@@ -309,7 +315,7 @@ class VehicleRouterApp:
             # Real Distances Configuration
             use_real_distances = st.sidebar.checkbox(
                 "🌍 Use Real-World Distances",
-                value=getattr(st.session_state, 'use_real_distances', True),
+                value=getattr(st.session_state, 'use_real_distances', OPTIMIZATION_DEFAULTS['use_real_distances']),
                 help="Use OpenStreetMap geocoding for accurate geographic distances (takes longer but more realistic)"
             )
             
@@ -364,14 +370,14 @@ class VehicleRouterApp:
             st.sidebar.markdown("**🔒 Order Constraints:**")
             max_orders_per_truck = st.sidebar.slider(
                 "Max Orders per Truck",
-                min_value=1, max_value=10, value=3, step=1,
+                min_value=1, max_value=10, value=OPTIMIZATION_DEFAULTS['max_orders_per_truck'], step=1,
                 help="Maximum number of orders that can be assigned to each truck"
             )
             
             # Depot return option
             depot_return = st.sidebar.checkbox(
                 "Trucks Return to Depot", 
-                value=False,  # Default to False for all methods
+                value=OPTIMIZATION_DEFAULTS['depot_return'],
                 help="Whether trucks must return to depot after completing deliveries"
             )
             
@@ -382,7 +388,7 @@ class VehicleRouterApp:
             
             # Create buttons only for enabled models
             model_buttons = {}
-            for model_key, model_config in self.AVAILABLE_MODELS.items():
+            for model_key, model_config in AVAILABLE_MODELS.items():
                 if model_config['enabled']:
                     model_buttons[model_key] = st.sidebar.button(
                         model_config['name'],
@@ -393,22 +399,25 @@ class VehicleRouterApp:
             for model_key, button_clicked in model_buttons.items():
                 if button_clicked:
                     st.session_state.optimization_method = model_key
-                    st.sidebar.success(f"{self.AVAILABLE_MODELS[model_key]['name']} selected")
+                    st.sidebar.success(f"{AVAILABLE_MODELS[model_key]['name']} selected")
             
 
             
             # Method-specific parameters (only show for selected method)
             if hasattr(st.session_state, 'optimization_method'):
-                if st.session_state.optimization_method == 'enhanced':
+                method = st.session_state.optimization_method
+                method_defaults = get_method_defaults(method)
+                
+                if method == 'enhanced':
                     st.sidebar.markdown("**🚀 Enhanced MILP Parameters:**")
                     cost_weight = st.sidebar.slider(
                         "Cost Weight", 
-                        min_value=0.0, max_value=1.0, value=0.6, step=0.1,
+                        min_value=0.0, max_value=1.0, value=method_defaults.get('cost_weight', 0.6), step=0.1,
                         help="Weight for truck costs in objective function"
                     )
                     distance_weight = st.sidebar.slider(
                         "Distance Weight", 
-                        min_value=0.0, max_value=1.0, value=0.4, step=0.1,
+                        min_value=0.0, max_value=1.0, value=method_defaults.get('distance_weight', 0.4), step=0.1,
                         help="Weight for travel distances in objective function"
                     )
                     
@@ -419,41 +428,41 @@ class VehicleRouterApp:
                         distance_weight = distance_weight / total_weight
                         st.sidebar.info(f"⚖️ **Weights:** Cost={cost_weight:.2f}, Distance={distance_weight:.2f}")
                     
-                    # Default GA values
-                    population_size = 50
-                    max_generations = 100
-                    mutation_rate = 0.1
+                    # Default values for other parameters
+                    population_size = method_defaults.get('population_size', 50)
+                    max_generations = method_defaults.get('max_generations', 100)
+                    mutation_rate = method_defaults.get('mutation_rate', 0.1)
                     
-                elif st.session_state.optimization_method == 'genetic':
+                elif method == 'genetic':
                     st.sidebar.markdown("**🧬 Genetic Algorithm Parameters:**")
                     
                     # Fixed equal weights for genetic algorithm
-                    cost_weight = 0.5
-                    distance_weight = 0.5
+                    cost_weight = method_defaults.get('cost_weight', 0.5)
+                    distance_weight = method_defaults.get('distance_weight', 0.5)
                     
                     population_size = st.sidebar.slider(
                         "Population Size", 
-                        min_value=20, max_value=100, value=50, step=10,
+                        min_value=20, max_value=100, value=method_defaults.get('population_size', 50), step=10,
                         help="Number of solutions in population"
                     )
                     max_generations = st.sidebar.slider(
                         "Max Generations", 
-                        min_value=50, max_value=300, value=100, step=25,
+                        min_value=50, max_value=300, value=method_defaults.get('max_generations', 100), step=25,
                         help="Maximum number of generations"
                     )
                     mutation_rate = st.sidebar.slider(
                         "Mutation Rate", 
-                        min_value=0.05, max_value=0.3, value=0.1, step=0.05,
+                        min_value=0.05, max_value=0.3, value=method_defaults.get('mutation_rate', 0.1), step=0.05,
                         help="Probability of mutation"
                     )
                     
                 else:  # Standard method
-                    # Default values for standard model
-                    cost_weight = 1.0
-                    distance_weight = 0.0
-                    population_size = 50
-                    max_generations = 100
-                    mutation_rate = 0.1
+                    # Use method defaults
+                    cost_weight = method_defaults.get('cost_weight', 1.0)
+                    distance_weight = method_defaults.get('distance_weight', 0.0)
+                    population_size = method_defaults.get('population_size', 50)
+                    max_generations = method_defaults.get('max_generations', 100)
+                    mutation_rate = method_defaults.get('mutation_rate', 0.1)
             else:
                 # Default values when no method selected
                 cost_weight = 1.0
@@ -463,18 +472,15 @@ class VehicleRouterApp:
                 mutation_rate = 0.1
             
             # Greedy route optimization always enabled
-            enable_greedy_routes = True
+            enable_greedy_routes = OPTIMIZATION_DEFAULTS['enable_greedy_routes']
             
-            # Set solver timeout based on config.toml and optimization method
+            # Set solver timeout based on method configuration
             if hasattr(st.session_state, 'optimization_method'):
-                if st.session_state.optimization_method == 'standard':
-                    solver_timeout = 60  # Fast method
-                elif st.session_state.optimization_method == 'genetic':
-                    solver_timeout = 300  # More time for evolution
-                else:  # enhanced
-                    solver_timeout = 300  # Complex model needs time
+                method = st.session_state.optimization_method
+                method_defaults = get_method_defaults(method)
+                solver_timeout = method_defaults.get('solver_timeout', OPTIMIZATION_DEFAULTS['solver_timeout'])
             else:
-                solver_timeout = 300  # Default for genetic (first option)
+                solver_timeout = OPTIMIZATION_DEFAULTS['solver_timeout']
             
             # Run optimization button
             if st.sidebar.button("🚀 Run Optimization", type="primary"):

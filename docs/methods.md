@@ -385,8 +385,7 @@ real_distances = data_gen.generate_distance_matrix(
 )
 
 # Standard MILP + Greedy
-optimizer = VrpOptimizer(orders_df, trucks_df, real_distances, 
-                        enable_greedy_routes=True)
+optimizer = VrpOptimizer(orders_df, trucks_df, real_distances, enable_greedy_routes=True)
 
 # Enhanced MILP with custom weights
 enhanced = EnhancedVrpOptimizer(orders_df, trucks_df, real_distances)

@@ -134,8 +134,8 @@ python src/main.py --help
 ### **Required Dependencies**
 ```
 Core Libraries:
-- pandas >= 1.3.0          # Data manipulation and analysis
-- numpy >= 1.21.0          # Numerical computing
+- pandas >= 1.3.0         # Data manipulation and analysis
+- numpy >= 1.21.0         # Numerical computing
 - pulp >= 2.6.0           # Linear programming optimization
 - streamlit >= 1.25.0     # Interactive web applications
 - plotly >= 5.0.0         # Interactive visualizations
@@ -437,6 +437,22 @@ Problem Size     Standard MILP    Enhanced MILP    Genetic Algorithm
 ```
 
 ## 🔧 Advanced Configuration
+
+### **App Configuration**
+The Streamlit app uses a configuration system located in `app/config.py`. You can easily customize:
+
+- **Default Algorithm**: Change `DEFAULT_ALGORITHM` to 'standard', 'genetic', or 'enhanced'
+- **Available Models**: Enable/disable optimization methods in `AVAILABLE_MODELS`
+- **Optimization Defaults**: Modify `OPTIMIZATION_DEFAULTS` for default parameters
+- **UI Settings**: Customize `UI_CONFIG` for app appearance
+
+**Quick Configuration Examples:**
+```python
+# In app/config.py
+DEFAULT_ALGORITHM = 'standard'  # Change default algorithm
+OPTIMIZATION_DEFAULTS['max_orders_per_truck'] = 5  # Increase order limit
+AVAILABLE_MODELS['enhanced']['enabled'] = True  # Show Enhanced MILP
+```
 
 ### **Real-World Distance Calculation**
 The system uses OpenStreetMap's Nominatim service with intelligent fallback:

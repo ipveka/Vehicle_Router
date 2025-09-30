@@ -32,8 +32,8 @@ class DocumentationRenderer:
             Choose from Mathematical Programming, Hybrid Optimization, or Evolutionary Algorithms to find effective solutions for your routing challenges.
             
             #### 🎯 **Available Optimization Methods**
+            - **🧬 Default - Genetic Algorithm**: Evolutionary simulation approach with balanced cost-distance optimization
             - **📊 Standard MILP + Greedy**: Fast cost-optimal truck selection with route sequence optimization
-            - **🧬 Genetic Algorithm**: Evolutionary approach with balanced cost-distance optimization
             
             #### 🌍 **Distance Calculation Options**
             - **Simulated Distances**: Mathematical approximation for quick testing and development
