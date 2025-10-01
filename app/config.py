@@ -147,7 +147,7 @@ EXPORT_CONFIG = {
 LOGGING_CONFIG = {
     'log_level': 'INFO',
     'enable_file_logging': True,
-    'enable_console_logging': False,  # Streamlit handles console output
+    'enable_console_logging': False,
     'enable_performance_tracking': True,
     'log_rotation': True,
     'max_log_files': 10,
@@ -164,7 +164,7 @@ VALIDATION_CONFIG = {
     'validate_capacity_constraints': True,
     'validate_order_assignment': True,
     'validate_route_feasibility': True,
-    'strict_validation': False,  # Set to True for production use
+    'strict_validation': False,
 }
 
 # =============================================================================
