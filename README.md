@@ -134,8 +134,8 @@ python src/main.py --help
 ### **Required Dependencies**
 ```
 Core Libraries:
-- pandas >= 1.3.0          # Data manipulation and analysis
-- numpy >= 1.21.0          # Numerical computing
+- pandas >= 1.3.0         # Data manipulation and analysis
+- numpy >= 1.21.0         # Numerical computing
 - pulp >= 2.6.0           # Linear programming optimization
 - streamlit >= 1.25.0     # Interactive web applications
 - plotly >= 5.0.0         # Interactive visualizations
@@ -438,6 +438,22 @@ Problem Size     Standard MILP    Enhanced MILP    Genetic Algorithm
 
 ## 🔧 Advanced Configuration
 
+### **App Configuration**
+The Streamlit app uses a configuration system located in `app/config.py`. You can easily customize:
+
+- **Default Algorithm**: Change `DEFAULT_ALGORITHM` to 'standard', 'genetic', or 'enhanced'
+- **Available Models**: Enable/disable optimization methods in `AVAILABLE_MODELS`
+- **Optimization Defaults**: Modify `OPTIMIZATION_DEFAULTS` for default parameters
+- **UI Settings**: Customize `UI_CONFIG` for app appearance
+
+**Quick Configuration Examples:**
+```python
+# In app/config.py
+DEFAULT_ALGORITHM = 'standard'  # Change default algorithm
+OPTIMIZATION_DEFAULTS['max_orders_per_truck'] = 5  # Increase order limit
+AVAILABLE_MODELS['enhanced']['enabled'] = True  # Show Enhanced MILP
+```
+
 ### **Real-World Distance Calculation**
 The system uses OpenStreetMap's Nominatim service with intelligent fallback:
 
@@ -458,13 +474,12 @@ calculator = DistanceCalculator(country_code="DE")  # Germany
 
 **Standard MILP + Greedy:**
 - `depot_return`: Whether trucks return to depot (default: False)
-- `enable_greedy_routes`: Enable route sequence optimization (default: True)
 - `max_orders_per_truck`: Maximum orders per truck (default: 3)
 - `solver_timeout`: CBC solver timeout in seconds (default: 60)
 
 **Enhanced MILP:**
-- `cost_weight`: Weight for truck costs (0-1, default: 0.6)
-- `distance_weight`: Weight for travel distances (0-1, default: 0.4)
+- `cost_weight`: Weight for truck costs (0-1, default: 0.5)
+- `distance_weight`: Weight for travel distances (0-1, default: 0.5)
 - `max_orders_per_truck`: Maximum orders per truck (default: 3)
 - `solver_timeout`: Extended timeout for complex model (default: 120)
 

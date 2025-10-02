@@ -103,7 +103,7 @@ class OptimizationRunner:
                     cost_weight, distance_weight, depot_location, depot_return, max_orders_per_truck,
                     population_size, max_generations, mutation_rate
                 )
-            else:  # standard
+            else: # standard
                 success = self._run_standard_optimization(
                     orders_df, trucks_df, distance_matrix, solver_timeout,
                     depot_location, depot_return, enable_greedy_routes, max_orders_per_truck
@@ -234,9 +234,9 @@ class OptimizationRunner:
             return False
     
     def _run_standard_optimization(self, orders_df: pd.DataFrame, trucks_df: pd.DataFrame,
-                                 distance_matrix: pd.DataFrame, solver_timeout: int,
-                                 depot_location: str, depot_return: bool,
-                                 enable_greedy_routes: bool, max_orders_per_truck: int) -> bool:
+                                   distance_matrix: pd.DataFrame, solver_timeout: int,
+                                   depot_location: str, depot_return: bool,
+                                   enable_greedy_routes: bool, max_orders_per_truck: int) -> bool:
         """Run standard MILP optimization"""
         self._log("Initializing Standard MILP optimizer...")
         

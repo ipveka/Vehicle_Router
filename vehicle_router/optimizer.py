@@ -148,6 +148,7 @@ class VrpOptimizer:
         if not isinstance(orders_df, pd.DataFrame):
             raise TypeError("orders_df must be a pandas DataFrame")
         
+        # Check columns
         required_order_cols = ['order_id', 'volume', 'postal_code']
         missing_cols = [col for col in required_order_cols if col not in orders_df.columns]
         if missing_cols:
@@ -159,7 +160,7 @@ class VrpOptimizer:
         if orders_df['volume'].min() <= 0:
             raise ValueError("All order volumes must be positive")
         
-        # Validate trucks DataFrame
+        # Check columns
         if not isinstance(trucks_df, pd.DataFrame):
             raise TypeError("trucks_df must be a pandas DataFrame")
         
@@ -176,10 +177,6 @@ class VrpOptimizer:
         
         if trucks_df['cost'].min() < 0:
             raise ValueError("All truck costs must be non-negative")
-        
-        # Validate distance matrix
-        if not isinstance(distance_matrix, pd.DataFrame):
-            raise TypeError("distance_matrix must be a pandas DataFrame")
         
         # Check feasibility
         total_volume = orders_df['volume'].sum()

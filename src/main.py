@@ -239,13 +239,13 @@ def main():
     
     # Simple options
     parser.add_argument('--optimizer', choices=['standard', 'enhanced', 'genetic'], default='standard',
-                       help='Optimizer type (default: standard)')
+                        help='Optimizer type (default: standard)')
     parser.add_argument('--depot', type=str, default='08020',
-                       help='Depot postal code (default: 08020)')
+                        help='Depot postal code (default: 08020)')
     parser.add_argument('--max-orders-per-truck', type=int, default=3,
-                       help='Maximum number of orders per truck (default: 3)')
+                        help='Maximum number of orders per truck (default: 3)')
     parser.add_argument('--real-distances', action='store_true',
-                       help='Use real-world distances via OpenStreetMap (default: simulated)')
+                        help='Use real-world distances via OpenStreetMap (default: simulated)')
     parser.add_argument('--quiet', action='store_true', help='Reduce output verbosity')
     
     args = parser.parse_args()
