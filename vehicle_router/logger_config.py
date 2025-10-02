@@ -1,26 +1,8 @@
 """
 Advanced Logging Configuration Module
 
-This module provides comprehensive logging functionality for the Vehicle Router application,
-supporting both the main CLI application and the Streamlit web interface with separate
-log files, rotation, and detailed formatting.
-
-Features:
-- Separate log directories for main and app components
-- Log rotation to prevent file size issues
-- Structured logging with timestamps and context
-- Console and file output with different log levels
-- Session-based logging for web application
-- Performance tracking and debugging support
-
-Usage:
-    from vehicle_router.logger_config import setup_main_logging, setup_app_logging
-    
-    # For main.py
-    logger = setup_main_logging(log_level="INFO")
-    
-    # For streamlit app
-    logger = setup_app_logging(session_id="user_123", log_level="INFO")
+Provides comprehensive logging functionality for the Vehicle Router application,
+supporting both CLI and Streamlit web interface with separate log files and rotation.
 """
 
 import logging
@@ -34,11 +16,8 @@ import uuid
 
 
 class CustomFormatter(logging.Formatter):
-    """
-    Custom formatter with color support and enhanced formatting
-    """
+    """Custom formatter with color support and enhanced formatting"""
     
-    # Color codes for different log levels
     COLORS = {
         'DEBUG': '\033[36m',     # Cyan
         'INFO': '\033[32m',      # Green

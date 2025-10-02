@@ -132,35 +132,20 @@ class VrpOptimizer:
     
     def _validate_input_data(self, orders_df: pd.DataFrame, trucks_df: pd.DataFrame, 
                            distance_matrix: pd.DataFrame) -> None:
-        """
-        Validate input data for consistency and completeness
-        
-        Args:
-            orders_df (pd.DataFrame): Orders data to validate
-            trucks_df (pd.DataFrame): Trucks data to validate
-            distance_matrix (pd.DataFrame): Distance matrix to validate
-            
-        Raises:
-            ValueError: If data validation fails
-            TypeError: If data types are incorrect
-        """
+        """Validate input data for consistency and completeness"""
         # Validate orders DataFrame
         if not isinstance(orders_df, pd.DataFrame):
             raise TypeError("orders_df must be a pandas DataFrame")
         
-        # Check columns
         required_order_cols = ['order_id', 'volume', 'postal_code']
         missing_cols = [col for col in required_order_cols if col not in orders_df.columns]
         if missing_cols:
             raise ValueError(f"orders_df missing required columns: {missing_cols}")
         
-        if orders_df.empty:
-            raise ValueError("orders_df cannot be empty")
+        if orders_df.empty or orders_df['volume'].min() <= 0:
+            raise ValueError("orders_df cannot be empty and all volumes must be positive")
         
-        if orders_df['volume'].min() <= 0:
-            raise ValueError("All order volumes must be positive")
-        
-        # Check columns
+        # Validate trucks DataFrame
         if not isinstance(trucks_df, pd.DataFrame):
             raise TypeError("trucks_df must be a pandas DataFrame")
         
@@ -169,14 +154,8 @@ class VrpOptimizer:
         if missing_cols:
             raise ValueError(f"trucks_df missing required columns: {missing_cols}")
         
-        if trucks_df.empty:
-            raise ValueError("trucks_df cannot be empty")
-        
-        if trucks_df['capacity'].min() <= 0:
-            raise ValueError("All truck capacities must be positive")
-        
-        if trucks_df['cost'].min() < 0:
-            raise ValueError("All truck costs must be non-negative")
+        if trucks_df.empty or trucks_df['capacity'].min() <= 0 or trucks_df['cost'].min() < 0:
+            raise ValueError("trucks_df cannot be empty, capacities must be positive, costs non-negative")
         
         # Check feasibility
         total_volume = orders_df['volume'].sum()
@@ -188,45 +167,24 @@ class VrpOptimizer:
         logger.info("Input data validation completed successfully")
     
     def build_model(self) -> None:
-        """
-        Build the MILP optimization model with decision variables and constraints
-        
-        This method constructs the complete MILP formulation including:
-        - Decision variables for order assignments and truck usage
-        - Objective function minimizing total truck costs
-        - Capacity constraints for each truck
-        - Order assignment constraints ensuring each order is delivered once
-        - Truck usage constraints linking assignments to truck selection
-        
-        The model uses PuLP's LpProblem class and binary decision variables.
-        """
+        """Build the MILP optimization model with decision variables and constraints"""
         logger.info("Building MILP optimization model...")
         
         # Create the optimization problem
         self.model = pulp.LpProblem("Vehicle_Routing_Problem", pulp.LpMinimize)
         
-        # Create decision variables
-        logger.info("Creating decision variables...")
+        # Create decision variables and set objective
         self._create_decision_variables()
-        
-        # Set objective function
-        logger.info("Setting objective function...")
         self._set_objective_function()
         
         # Add constraints
-        logger.info("Adding optimization constraints...")
         self._add_order_assignment_constraints()
         self._add_capacity_constraints()
         self._add_max_orders_constraints()
         self._add_truck_usage_constraints()
         
         # Log model statistics
-        num_variables = len(self.model.variables())
-        num_constraints = len(self.model.constraints)
-        
-        logger.info(f"MILP model built successfully:")
-        logger.info(f"  Decision variables: {num_variables}")
-        logger.info(f"  Constraints: {num_constraints}")
+        logger.info(f"MILP model built: {len(self.model.variables())} variables, {len(self.model.constraints)} constraints")
         logger.info(f"  Problem type: {self.model.sense}")
     
     def _create_decision_variables(self) -> None:
@@ -374,19 +332,7 @@ class VrpOptimizer:
         logger.info(f"Added {constraint_count} truck usage constraints")
     
     def solve(self, timeout: int = 300) -> bool:
-        """
-        Solve the MILP optimization problem with comprehensive logging
-        
-        Uses PuLP's default solver to find the optimal solution. Includes
-        detailed logging of the solving process, timing information, and
-        solution status reporting.
-        
-        Returns:
-            bool: True if optimal solution found, False otherwise
-            
-        Raises:
-            RuntimeError: If model hasn't been built before solving
-        """
+        """Solve the MILP optimization problem"""
         if self.model is None:
             raise RuntimeError("Model must be built before solving. Call build_model() first.")
         
@@ -394,33 +340,18 @@ class VrpOptimizer:
         start_time = time.time()
         
         try:
-            # Solve the optimization problem
             self.model.solve(pulp.PULP_CBC_CMD(msg=0, timeLimit=timeout))
-            
             solve_time = time.time() - start_time
-            
-            # Check solution status
             status = pulp.LpStatus[self.model.status]
-            logger.info(f"Solver completed in {solve_time:.2f} seconds")
-            logger.info(f"Solution status: {status}")
+            
+            logger.info(f"Solver completed in {solve_time:.2f}s with status: {status}")
             
             if self.model.status == pulp.LpStatusOptimal:
-                # Optimal solution found
                 objective_value = pulp.value(self.model.objective)
                 logger.info(f"Optimal solution found with total cost: €{objective_value:.0f}")
-                
                 self.is_solved = True
                 self._extract_solution()
                 return True
-                
-            elif self.model.status == pulp.LpStatusInfeasible:
-                logger.error("Problem is infeasible - no solution exists")
-                return False
-                
-            elif self.model.status == pulp.LpStatusUnbounded:
-                logger.error("Problem is unbounded")
-                return False
-                
             else:
                 logger.error(f"Solver failed with status: {status}")
                 return False

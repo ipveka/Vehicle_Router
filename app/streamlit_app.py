@@ -1,24 +1,15 @@
-#!/usr/bin/env python3
 """
 Vehicle Router Streamlit Application
 
-This Streamlit application provides an interactive web interface for the Vehicle Routing
-Problem optimization system. It allows users to explore data, run optimizations, 
-analyze solutions, and visualize results through a user-friendly web interface.
-
-Usage:
-    streamlit run app/streamlit_app.py0
+Interactive web interface for Vehicle Routing Problem optimization.
 """
 
 import streamlit as st
 import sys
-import os
-import logging
 from pathlib import Path
 import pandas as pd
-import numpy as np
 import time
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 # Add project root to Python path
 project_root = Path(__file__).parent.parent
@@ -34,10 +25,8 @@ from app_utils.documentation import DocumentationRenderer
 
 # Import configuration
 from app.config import (
-    DEFAULT_ALGORITHM, AVAILABLE_MODELS, UI_CONFIG, OPTIMIZATION_DEFAULTS,
-    METHOD_DEFAULTS, DISTANCE_CONFIG, DEPOT_CONFIG, LOGGING_CONFIG,
-    get_enabled_models, get_model_display_name, is_model_enabled,
-    get_method_defaults, validate_config, get_config_summary
+    OPTIMIZATION_METHOD, UI_CONFIG, OPTIMIZATION_DEFAULTS,
+    METHOD_PARAMS, validate_config, get_config_summary, get_method_display_name, get_method_params
 )
 
 # Configure Streamlit page
@@ -208,14 +197,9 @@ class VehicleRouterApp:
         if 'optimization_log' not in st.session_state:
             st.session_state.optimization_log = []
         
-        # Pre-select default algorithm from configuration
+        # Set the single optimization method from configuration
         if 'optimization_method' not in st.session_state:
-            # Set default algorithm from configuration
-            enabled_models = get_enabled_models()
-            if DEFAULT_ALGORITHM in enabled_models:
-                st.session_state.optimization_method = DEFAULT_ALGORITHM
-            else:
-                st.session_state.optimization_method = enabled_models[0] if enabled_models else 'standard'
+            st.session_state.optimization_method = OPTIMIZATION_METHOD
     
     def run(self):
         """Run the complete Streamlit application"""
@@ -381,32 +365,18 @@ class VehicleRouterApp:
                 help="Whether trucks must return to depot after completing deliveries"
             )
             
-            # Model selection with buttons (based on configuration)
-            st.sidebar.markdown("**Model Selection:**")
-            
-            # optimization_method is now pre-initialized in initialize_session_state()
-            
-            # Create buttons only for enabled models
-            model_buttons = {}
-            for model_key, model_config in AVAILABLE_MODELS.items():
-                if model_config['enabled']:
-                    model_buttons[model_key] = st.sidebar.button(
-                        model_config['name'],
-                        help=model_config['help']
-                    )
-            
-            # Handle button clicks
-            for model_key, button_clicked in model_buttons.items():
-                if button_clicked:
-                    st.session_state.optimization_method = model_key
-                    st.sidebar.success(f"{AVAILABLE_MODELS[model_key]['name']} selected")
+            # Show the selected optimization method (read-only)
+            st.sidebar.markdown("**Optimization Method:**")
+            method_display_name = get_method_display_name()
+            st.sidebar.info(f"🎯 {method_display_name}")
+            st.sidebar.markdown("*Configured in app/config.py*")
             
 
             
             # Method-specific parameters (only show for selected method)
             if hasattr(st.session_state, 'optimization_method'):
                 method = st.session_state.optimization_method
-                method_defaults = get_method_defaults(method)
+                method_defaults = get_method_params()
                 
                 if method == 'enhanced':
                     st.sidebar.markdown("**🚀 Enhanced MILP Parameters:**")
@@ -471,13 +441,12 @@ class VehicleRouterApp:
                 max_generations = 100
                 mutation_rate = 0.1
             
-            # Greedy route optimization always enabled
-            enable_greedy_routes = OPTIMIZATION_DEFAULTS['enable_greedy_routes']
+            # Greedy route optimization always enabled for standard method
+            enable_greedy_routes = True
             
             # Set solver timeout based on method configuration
             if hasattr(st.session_state, 'optimization_method'):
-                method = st.session_state.optimization_method
-                method_defaults = get_method_defaults(method)
+                method_defaults = get_method_params()
                 solver_timeout = method_defaults.get('solver_timeout', OPTIMIZATION_DEFAULTS['solver_timeout'])
             else:
                 solver_timeout = OPTIMIZATION_DEFAULTS['solver_timeout']
@@ -499,7 +468,6 @@ class VehicleRouterApp:
                         st.session_state.trucks_df,
                         st.session_state.distance_matrix,
                         solver_timeout=solver_timeout,
-                        enable_validation=True,  # Always enable validation
                         optimization_method=st.session_state.optimization_method,
                         cost_weight=cost_weight,
                         distance_weight=distance_weight,
@@ -677,7 +645,7 @@ class VehicleRouterApp:
             st.markdown("### Orders Information")
             st.dataframe(
                 st.session_state.orders_df,
-                use_container_width=True,
+                width='stretch',
                 column_config={
                     "order_id": st.column_config.TextColumn("Order ID", width="small"),
                     "volume": st.column_config.NumberColumn("Volume (m³)", format="%.1f"),
@@ -689,17 +657,17 @@ class VehicleRouterApp:
             col1, col2 = st.columns(2)
             with col1:
                 fig = self.visualization_manager.create_orders_volume_chart(st.session_state.orders_df)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
             
             with col2:
                 fig = self.visualization_manager.create_orders_distribution_chart(st.session_state.orders_df)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
         
         with tab2:
             st.markdown("### Trucks Information")
             st.dataframe(
                 st.session_state.trucks_df,
-                use_container_width=True,
+                width='stretch',
                 column_config={
                     "truck_id": st.column_config.NumberColumn("Truck ID", width="small"),
                     "capacity": st.column_config.NumberColumn("Capacity (m³)", format="%.1f"),
@@ -711,17 +679,17 @@ class VehicleRouterApp:
             col1, col2 = st.columns(2)
             with col1:
                 fig = self.visualization_manager.create_trucks_capacity_chart(st.session_state.trucks_df)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
             
             with col2:
                 fig = self.visualization_manager.create_trucks_cost_efficiency_chart(st.session_state.trucks_df)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
         
         with tab3:
             st.markdown("### Distance Matrix")
             st.dataframe(
                 st.session_state.distance_matrix,
-                use_container_width=True
+                width='stretch'
             )
     
     def render_solution_analysis(self):
@@ -850,7 +818,7 @@ class VehicleRouterApp:
                 st.session_state.orders_df,
                 st.session_state.trucks_df
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         
         with tab2:
             st.markdown("### Solution Analysis")
@@ -863,7 +831,7 @@ class VehicleRouterApp:
                     solution['costs'],
                     st.session_state.trucks_df
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
             
             with col2:
                 st.markdown("#### Volume Usage by Truck")
@@ -871,7 +839,7 @@ class VehicleRouterApp:
                     solution['utilization'],
                     st.session_state.trucks_df
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
     
     def _handle_data_loading_progress(self):
         """Handle data loading and distance matrix updates with progress bar at the top of the page"""
@@ -1229,16 +1197,13 @@ class VehicleRouterApp:
             method = st.session_state.optimization_method
             self.logger.info(f"📖 User accessing documentation for {method} method")
         
-        # Determine documentation method based on current selection
-        if hasattr(st.session_state, 'optimization_method'):
-            if st.session_state.optimization_method == 'enhanced':
-                doc_method = "enhanced"
-            elif st.session_state.optimization_method == 'genetic':
-                doc_method = "genetic"
-            else:
-                doc_method = "hybrid"  # Standard + Greedy (default)
+        # Determine documentation method based on configured method
+        if OPTIMIZATION_METHOD == 'enhanced':
+            doc_method = "enhanced"
+        elif OPTIMIZATION_METHOD == 'genetic':
+            doc_method = "genetic"
         else:
-            doc_method = "hybrid"  # Default to hybrid if not set
+            doc_method = "hybrid"  # Standard + Greedy
         
         # Render documentation for the selected method
         self.documentation_renderer.render_methodology(doc_method)

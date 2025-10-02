@@ -98,7 +98,7 @@ class UIComponents:
         
         st.dataframe(
             df,
-            use_container_width=True,
+            width='stretch',
             column_config=column_config,
             height=height
         )

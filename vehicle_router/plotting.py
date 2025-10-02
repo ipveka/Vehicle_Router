@@ -40,27 +40,8 @@ warnings.filterwarnings('ignore', category=UserWarning, module='matplotlib')
 def plot_routes(routes_df: pd.DataFrame, orders_df: pd.DataFrame, 
                 trucks_df: pd.DataFrame, distance_matrix: pd.DataFrame = None,
                 figsize: Tuple[int, int] = (12, 8), save_path: Optional[str] = None) -> plt.Figure:
-    """
-    Create individual route plots for each truck with proper route sequences and distance calculation
-    
-    Creates separate subplots for each truck showing:
-    - Depot location as a star marker
-    - Order locations assigned to each truck
-    - Clear route sequences following actual optimization results
-    - Distance and order information with total distance in title
-    
-    Args:
-        routes_df (pd.DataFrame): Routes data with truck assignments and sequences
-        orders_df (pd.DataFrame): Orders data with columns [order_id, volume, postal_code]
-        trucks_df (pd.DataFrame): Trucks data with columns [truck_id, capacity, cost]
-        distance_matrix (pd.DataFrame, optional): Distance matrix for route optimization
-        figsize (Tuple[int, int]): Figure size as (width, height)
-        save_path (Optional[str]): Path to save the plot image
-        
-    Returns:
-        plt.Figure: The matplotlib figure object with individual truck plots
-    """
-    logger.info("Creating individual truck route visualization plots with proper sequences...")
+    """Create individual route plots for each truck with proper route sequences"""
+    logger.info("Creating individual truck route visualization plots...")
     
     if routes_df.empty:
         fig, ax = plt.subplots(figsize=figsize)
@@ -216,28 +197,7 @@ def plot_routes(routes_df: pd.DataFrame, orders_df: pd.DataFrame,
 
 def plot_costs(cost_summary: Dict[str, Any], trucks_df: pd.DataFrame,
                figsize: Tuple[int, int] = (10, 6), save_path: Optional[str] = None) -> plt.Figure:
-    """
-    Show bar chart of truck cost contributions with detailed breakdown
-    
-    Creates a comprehensive cost analysis visualization displaying:
-    - Individual truck costs as bars with different colors
-    - Total cost summary and breakdown
-    - Cost per unit capacity analysis
-    - Clean styling with proper labels and formatting
-    
-    Args:
-        cost_summary (Dict[str, Any]): Cost breakdown data from optimization solution
-        trucks_df (pd.DataFrame): Trucks data with columns [truck_id, capacity, cost]
-        figsize (Tuple[int, int]): Figure size as (width, height)
-        save_path (Optional[str]): Path to save the plot image
-        
-    Returns:
-        plt.Figure: The matplotlib figure object
-        
-    Example:
-        >>> fig = plot_costs(solution['costs'], trucks_df)
-        >>> plt.show()
-    """
+    """Show bar chart of truck cost contributions with detailed breakdown"""
     logger.info("Creating cost analysis plot...")
     
     # Extract cost data
@@ -333,28 +293,7 @@ def plot_costs(cost_summary: Dict[str, Any], trucks_df: pd.DataFrame,
 
 def plot_utilization(utilization_data: Dict[int, Dict[str, Any]], trucks_df: pd.DataFrame,
                     figsize: Tuple[int, int] = (12, 8), save_path: Optional[str] = None) -> plt.Figure:
-    """
-    Display capacity utilization rates for selected trucks with detailed metrics
-    
-    Creates a comprehensive utilization analysis showing:
-    - Capacity utilization percentages as horizontal bar chart
-    - Used vs available capacity comparison
-    - Efficiency metrics and recommendations
-    - Color coding based on utilization levels
-    
-    Args:
-        utilization_data (Dict[int, Dict[str, Any]]): Truck utilization data from solution
-        trucks_df (pd.DataFrame): Trucks data with columns [truck_id, capacity, cost]
-        figsize (Tuple[int, int]): Figure size as (width, height)
-        save_path (Optional[str]): Path to save the plot image
-        
-    Returns:
-        plt.Figure: The matplotlib figure object
-        
-    Example:
-        >>> fig = plot_utilization(solution['utilization'], trucks_df)
-        >>> plt.show()
-    """
+    """Display capacity utilization rates for selected trucks with detailed metrics"""
     logger.info("Creating capacity utilization plot...")
     
     if not utilization_data:

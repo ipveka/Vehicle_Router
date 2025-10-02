@@ -1,8 +1,4 @@
-"""
-Utility Functions Module
-
-This module provides helper functions for the Vehicle Routing Problem optimization.
-"""
+"""Utility Functions Module for Vehicle Routing Problem optimization"""
 
 import logging
 import pandas as pd
@@ -20,14 +16,8 @@ def calculate_distance_matrix(postal_codes: List[str], distance_per_unit: float 
     logger.info(f"Calculating distance matrix for {len(postal_codes)} postal codes...")
     
     # Input validation
-    if not isinstance(postal_codes, list):
-        raise TypeError("postal_codes must be a list")
-    
-    if not postal_codes:
-        raise ValueError("postal_codes cannot be empty")
-    
-    if not all(isinstance(code, str) for code in postal_codes):
-        raise TypeError("All postal codes must be strings")
+    if not postal_codes or not all(isinstance(code, str) for code in postal_codes):
+        raise ValueError("postal_codes must be a non-empty list of strings")
     
     # Validate postal code format
     postal_pattern = re.compile(r'^\d{5}$')

@@ -1,74 +1,36 @@
 """
 Vehicle Router App Configuration
 
-This module contains all configurable parameters for the Vehicle Router Streamlit application.
-Modify these settings to customize the app behavior without changing the main code.
-
-Configuration Categories:
-- Default Algorithm Selection
-- Available Models and Features
-- UI Settings and Labels
-- Optimization Parameters
-- Distance Calculation Settings
+Simple configuration for the Vehicle Router Streamlit application.
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 # =============================================================================
-# DEFAULT ALGORITHM CONFIGURATION
+# OPTIMIZATION METHOD SELECTION
 # =============================================================================
 
-# Default optimization method when the app starts
-# Options: 'standard', 'genetic', 'enhanced'
-DEFAULT_ALGORITHM = 'genetic'
+# The optimization method to use in the app
+OPTIMIZATION_METHOD = 'standard'
 
-# =============================================================================
-# AVAILABLE MODELS CONFIGURATION
-# =============================================================================
-
-# Control which optimization models are available in the UI
-# Set 'enabled': False to hide a model from the interface
-AVAILABLE_MODELS = {
-    'genetic': {
-        'name': '🧬 Genetic Algorithm',
-        'help': 'Evolutionary multi-objective optimization',
-        'enabled': True,
-        'description': 'Best for large problems and solution diversity exploration'
-    },
-    'standard': {
-        'name': '📊 Standard MILP + Greedy',
-        'help': 'Cost optimization with route enhancement',
-        'enabled': True,
-        'description': 'Fast and balanced optimization for daily operations'
-    },
-    'enhanced': {
-        'name': '🚀 Enhanced MILP',
-        'help': 'Advanced MILP with integrated routing',
-        'enabled': False,  # Hidden by default (advanced users only)
-        'description': 'Globally optimal multi-objective optimization'
-    }
-}
+# For backward compatibility with tests
+DEFAULT_ALGORITHM = OPTIMIZATION_METHOD
 
 # =============================================================================
 # UI CONFIGURATION
 # =============================================================================
 
-# App appearance and behavior settings
 UI_CONFIG = {
     'page_title': 'Vehicle Router Optimizer',
     'page_icon': '🚛',
     'layout': 'wide',
-    'initial_sidebar_state': 'expanded',
-    'show_logs_by_default': False,
-    'enable_progress_bars': True,
-    'enable_animations': True
+    'initial_sidebar_state': 'expanded'
 }
 
 # =============================================================================
-# OPTIMIZATION DEFAULTS
+# OPTIMIZATION PARAMETERS
 # =============================================================================
 
-# Default optimization parameters
 OPTIMIZATION_DEFAULTS = {
     'max_orders_per_truck': 3,
     'depot_return': False,
@@ -78,8 +40,7 @@ OPTIMIZATION_DEFAULTS = {
     'solver_timeout': 300,
 }
 
-# Method-specific default parameters
-METHOD_DEFAULTS = {
+METHOD_PARAMS = {
     'standard': {
         'solver_timeout': 60,
         'cost_weight': 1.0,
@@ -104,211 +65,130 @@ METHOD_DEFAULTS = {
 # DISTANCE CALCULATION CONFIGURATION
 # =============================================================================
 
-# Distance calculation settings
 DISTANCE_CONFIG = {
-    'default_method': 'real',  # 'real' or 'simulated'
-    'country_code': 'ES',  # ISO country code for geocoding
-    'rate_limit_delay': 0.5,  # Seconds between API calls
-    'geocoding_timeout': 10,  # Seconds timeout for geocoding requests
-    'enable_caching': True,
-    'cache_duration': 3600,  # Cache duration in seconds (1 hour)
+    'default_method': 'simulated',
+    'country_code': 'ES',
+    'geocoding_timeout': 5.0,
+    'rate_limit_delay': 0.1,
+    'cache_coordinates': True
 }
 
 # =============================================================================
 # DEPOT CONFIGURATION
 # =============================================================================
 
-# Default depot settings
 DEPOT_CONFIG = {
     'default_location': '08020',
-    'allow_custom_depot': True,
-    'show_depot_selector': True,
 }
 
 # =============================================================================
-# EXPORT AND VISUALIZATION CONFIGURATION
+# AVAILABLE MODELS CONFIGURATION
 # =============================================================================
 
-# Export and visualization settings
-EXPORT_CONFIG = {
-    'enable_excel_export': True,
-    'enable_csv_export': True,
-    'enable_detailed_reports': True,
-    'default_export_format': 'excel',
-    'include_visualizations': True,
-    'save_plots_to_disk': False,
-}
-
-# =============================================================================
-# LOGGING CONFIGURATION
-# =============================================================================
-
-# Logging and monitoring settings
-LOGGING_CONFIG = {
-    'log_level': 'INFO',
-    'enable_file_logging': True,
-    'enable_console_logging': False,
-    'enable_performance_tracking': True,
-    'log_rotation': True,
-    'max_log_files': 10,
-    'log_directory': 'logs/app',
-}
-
-# =============================================================================
-# VALIDATION CONFIGURATION
-# =============================================================================
-
-# Solution validation settings
-VALIDATION_CONFIG = {
-    'enable_solution_validation': True,
-    'validate_capacity_constraints': True,
-    'validate_order_assignment': True,
-    'validate_route_feasibility': True,
-    'strict_validation': False,
-}
-
-# =============================================================================
-# ADVANCED SETTINGS
-# =============================================================================
-
-# Advanced configuration options
-ADVANCED_CONFIG = {
-    'enable_debug_mode': False,
-    'show_technical_details': False,
-    'enable_experimental_features': False,
-    'memory_usage_warnings': True,
-    'performance_monitoring': True,
-}
-
-# =============================================================================
-# CONFIGURATION VALIDATION
-# =============================================================================
-
-def validate_config() -> Dict[str, Any]:
-    """
-    Validate the configuration and return any issues found.
-    
-    Returns:
-        Dict containing validation results and any warnings/errors
-    """
-    issues = {
-        'errors': [],
-        'warnings': [],
-        'info': []
+AVAILABLE_MODELS = {
+    'standard': {
+        'name': '📊 Standard MILP + Greedy',
+        'help': 'Two-phase hybrid optimization: cost-optimal truck selection + route optimization',
+        'enabled': True,
+        'description': 'Uses mixed-integer linear programming with greedy route construction'
+    },
+    'enhanced': {
+        'name': '🚀 Enhanced MILP',
+        'help': 'Advanced MILP with multi-objective optimization',
+        'enabled': True,
+        'description': 'Enhanced MILP with cost and distance weighting'
+    },
+    'genetic': {
+        'name': '🧬 Genetic Algorithm',
+        'help': 'Evolutionary optimization approach',
+        'enabled': True,
+        'description': 'Genetic algorithm for complex optimization problems'
     }
-    
-    # Validate default algorithm
-    if DEFAULT_ALGORITHM not in AVAILABLE_MODELS:
-        issues['errors'].append(f"Default algorithm '{DEFAULT_ALGORITHM}' not found in AVAILABLE_MODELS")
-    elif not AVAILABLE_MODELS[DEFAULT_ALGORITHM]['enabled']:
-        issues['warnings'].append(f"Default algorithm '{DEFAULT_ALGORITHM}' is disabled")
-    
-    # Validate that at least one model is enabled
-    enabled_models = [k for k, v in AVAILABLE_MODELS.items() if v['enabled']]
-    if not enabled_models:
-        issues['errors'].append("No optimization models are enabled")
-    
-    # Validate method defaults
-    for method in AVAILABLE_MODELS.keys():
-        if method not in METHOD_DEFAULTS:
-            issues['warnings'].append(f"No default parameters defined for method '{method}'")
-    
-    # Validate distance config
-    if DISTANCE_CONFIG['default_method'] not in ['real', 'simulated']:
-        issues['errors'].append("Distance method must be 'real' or 'simulated'")
-    
-    return issues
-
-def get_config_summary() -> str:
-    """
-    Get a summary of the current configuration.
-    
-    Returns:
-        String summary of key configuration settings
-    """
-    enabled_models = [k for k, v in AVAILABLE_MODELS.items() if v['enabled']]
-    
-    summary = f"""
-Vehicle Router App Configuration Summary:
-========================================
-
-Default Algorithm: {DEFAULT_ALGORITHM}
-Enabled Models: {', '.join(enabled_models)}
-Distance Method: {DISTANCE_CONFIG['default_method']}
-Max Orders per Truck: {OPTIMIZATION_DEFAULTS['max_orders_per_truck']}
-Real Distances: {OPTIMIZATION_DEFAULTS['use_real_distances']}
-Validation: {VALIDATION_CONFIG['enable_solution_validation']}
-Logging Level: {LOGGING_CONFIG['log_level']}
-    """
-    
-    return summary.strip()
+}
 
 # =============================================================================
 # CONFIGURATION HELPERS
 # =============================================================================
 
-def get_enabled_models() -> List[str]:
-    """Get list of enabled model keys."""
-    return [k for k, v in AVAILABLE_MODELS.items() if v['enabled']]
-
-def get_model_display_name(model_key: str) -> str:
-    """Get display name for a model key."""
-    return AVAILABLE_MODELS.get(model_key, {}).get('name', model_key)
+def get_enabled_models() -> list:
+    """Get only enabled models"""
+    return [k for k, v in AVAILABLE_MODELS.items() if v.get('enabled', True)]
 
 def is_model_enabled(model_key: str) -> bool:
-    """Check if a model is enabled."""
-    return AVAILABLE_MODELS.get(model_key, {}).get('enabled', False)
+    """Check if a model is enabled"""
+    return AVAILABLE_MODELS.get(model_key, {}).get('enabled', True)
+
+def get_model_display_name(model_key: str) -> str:
+    """Get display name for a model"""
+    return AVAILABLE_MODELS.get(model_key, {}).get('name', model_key)
+
+def get_method_display_name(method: str = None) -> str:
+    """Get display name for a method (defaults to current method)"""
+    if method is None:
+        method = OPTIMIZATION_METHOD
+    return AVAILABLE_MODELS.get(method, {}).get('name', method)
 
 def get_method_defaults(method: str) -> Dict[str, Any]:
-    """Get default parameters for a specific method."""
-    return METHOD_DEFAULTS.get(method, {})
+    """Get default parameters for a method"""
+    return METHOD_PARAMS.get(method, {})
 
-# =============================================================================
-# CONFIGURATION EXAMPLES
-# =============================================================================
+def get_method_params(method: str = None) -> Dict[str, Any]:
+    """Get parameters for a method (defaults to current method)"""
+    if method is None:
+        method = OPTIMIZATION_METHOD
+    return METHOD_PARAMS.get(method, {})
 
-# Example configurations for different use cases:
+# Method defaults for backward compatibility
+METHOD_DEFAULTS = METHOD_PARAMS
 
-# For development/testing (fast, simple)
-DEVELOPMENT_CONFIG = {
-    'DEFAULT_ALGORITHM': 'standard',
-    'AVAILABLE_MODELS': {
-        'standard': {'enabled': True},
-        'genetic': {'enabled': True},
-        'enhanced': {'enabled': False}
-    },
-    'OPTIMIZATION_DEFAULTS': {
-        'use_real_distances': False,  # Use simulated distances for speed
-        'max_orders_per_truck': 5
-    }
-}
+def validate_config() -> Dict[str, Any]:
+    """Validate the configuration"""
+    issues = {'errors': [], 'warnings': [], 'info': []}
+    
+    # Validate optimization method
+    if OPTIMIZATION_METHOD not in AVAILABLE_MODELS:
+        issues['errors'].append(f"OPTIMIZATION_METHOD '{OPTIMIZATION_METHOD}' must be one of: {list(AVAILABLE_MODELS.keys())}")
+    
+    # Validate method parameters exist
+    if OPTIMIZATION_METHOD in METHOD_PARAMS:
+        method_params = METHOD_PARAMS[OPTIMIZATION_METHOD]
+        
+        # Validate genetic algorithm parameters
+        if OPTIMIZATION_METHOD == 'genetic':
+            if method_params.get('population_size', 0) < 10:
+                issues['warnings'].append("Genetic Algorithm population_size should be 10 or more")
+            if method_params.get('max_generations', 0) < 10:
+                issues['warnings'].append("Genetic Algorithm max_generations should be 10 or more")
+            mutation_rate = method_params.get('mutation_rate', 0)
+            if not (0 <= mutation_rate <= 1):
+                issues['errors'].append("Genetic Algorithm mutation_rate must be between 0 and 1")
+        
+        # Validate enhanced MILP weights
+        elif OPTIMIZATION_METHOD == 'enhanced':
+            cost_w = method_params.get('cost_weight', 0)
+            dist_w = method_params.get('distance_weight', 0)
+            if not (0 <= cost_w <= 1 and 0 <= dist_w <= 1):
+                issues['errors'].append("Enhanced MILP cost_weight and distance_weight must be between 0 and 1")
+            if abs(cost_w + dist_w - 1.0) > 1e-6 and (cost_w > 0 or dist_w > 0):
+                issues['warnings'].append("Enhanced MILP cost_weight and distance_weight do not sum to 1. They will be normalized.")
+    
+    return issues
 
-# For production (comprehensive, robust)
-PRODUCTION_CONFIG = {
-    'DEFAULT_ALGORITHM': 'genetic',
-    'AVAILABLE_MODELS': {
-        'standard': {'enabled': True},
-        'genetic': {'enabled': True},
-        'enhanced': {'enabled': True}
-    },
-    'OPTIMIZATION_DEFAULTS': {
-        'use_real_distances': True,  # Use real-world distances
-        'max_orders_per_truck': 3
-    },
-    'VALIDATION_CONFIG': {
-        'strict_validation': True
-    }
-}
-
-# For demonstration (show all features)
-DEMO_CONFIG = {
-    'DEFAULT_ALGORITHM': 'genetic',
-    'AVAILABLE_MODELS': {
-        'standard': {'enabled': True},
-        'genetic': {'enabled': True},
-        'enhanced': {'enabled': True}
-    },
-    'UI_CONFIG': {
-        'show_logs_by_default': True
-    }
-}
+def get_config_summary() -> str:
+    """Get a summary of the current configuration"""
+    method_name = get_model_display_name(OPTIMIZATION_METHOD)
+    defaults = OPTIMIZATION_DEFAULTS
+    enabled_models = get_enabled_models()
+    
+    summary_parts = [
+        f"Default Algorithm: {OPTIMIZATION_METHOD}",
+        f"Method: {method_name}",
+        f"Enabled Models: {', '.join(enabled_models)}",
+        f"Distance Method: {DISTANCE_CONFIG['default_method']}",
+        f"Max Orders per Truck: {defaults['max_orders_per_truck']}",
+        f"Real Distances: {defaults['use_real_distances']}",
+        f"Validation: {'Enabled' if defaults['validation_enabled'] else 'Disabled'}",
+        f"Logging Level: INFO"
+    ]
+    
+    return " | ".join(summary_parts)

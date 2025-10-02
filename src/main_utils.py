@@ -25,20 +25,9 @@ from vehicle_router.plotting import plot_routes, plot_costs, plot_utilization
 
 
 def setup_logging(log_level: str = "INFO", log_file: Optional[str] = None) -> logging.Logger:
-    """
-    Set up comprehensive logging configuration using enhanced logger
-    
-    Args:
-        log_level (str): Logging level (DEBUG, INFO, WARNING, ERROR)
-        log_file (Optional[str]): Optional log file path (deprecated - use logger_config)
-        
-    Returns:
-        logging.Logger: Configured logger instance
-    """
-    # Import the new enhanced logging
+    """Set up logging configuration"""
     from vehicle_router.logger_config import setup_main_logging, log_system_info
     
-    # Set up enhanced logging for main application
     logger = setup_main_logging(
         log_level=log_level,
         log_to_file=True,
@@ -46,21 +35,14 @@ def setup_logging(log_level: str = "INFO", log_file: Optional[str] = None) -> lo
         enable_performance_tracking=True
     )
     
-    # Log system information for debugging
     log_system_info(logger)
-    
     return logger
 
 
 class DataManager:
-    """
-    Data Management Utility Class
-    
-    Handles data generation, loading, and validation for the Vehicle Router application.
-    """
+    """Data Management Utility Class"""
     
     def __init__(self, logger: logging.Logger):
-        """Initialize the DataManager"""
         self.logger = logger
         self.data_generator = None
         self.orders_df = None
@@ -69,68 +51,26 @@ class DataManager:
     
     def generate_data(self, use_example_data: bool = True, random_seed: Optional[int] = None, 
                      depot_location: str = '08020', use_real_distances: bool = False) -> bool:
-        """
-        Generate input data for the optimization problem
-        
-        Args:
-            use_example_data (bool): Whether to use example data
-            random_seed (Optional[int]): Random seed for data generation
-            depot_location (str): Depot location postal code
-            use_real_distances (bool): Whether to use real-world distances
-            
-        Returns:
-            bool: True if data generation successful, False otherwise
-        """
+        """Generate input data for the optimization problem"""
         self.logger.info("Step 1: Generating input data...")
         
         try:
-            # Initialize data generator
             self.data_generator = DataGenerator(
                 use_example_data=use_example_data,
                 random_seed=random_seed
             )
             
-            # Generate orders data
-            self.logger.info("Generating orders data...")
             self.orders_df = self.data_generator.generate_orders()
-            
-            if self.orders_df.empty:
-                self.logger.error("Failed to generate orders data")
-                return False
-            
-            # Generate trucks data
-            self.logger.info("Generating trucks data...")
             self.trucks_df = self.data_generator.generate_trucks()
             
-            if self.trucks_df.empty:
-                self.logger.error("Failed to generate trucks data")
-                return False
-            
-            # Generate distance matrix
-            self.logger.info("Generating distance matrix...")
             postal_codes = self.orders_df['postal_code'].tolist()
-            
-            # Ensure depot is included in postal codes
             if depot_location not in postal_codes:
                 postal_codes.append(depot_location)
-                self.logger.info(f"Added depot location {depot_location} to postal codes")
                 
             self.distance_matrix = self.data_generator.generate_distance_matrix(
                 postal_codes, use_real_distances=use_real_distances)
             
-            if self.distance_matrix.empty:
-                self.logger.error("Failed to generate distance matrix")
-                return False
-            
-            # Generate and log data summary
-            data_summary = self.data_generator.get_data_summary(
-                self.orders_df, self.trucks_df, self.distance_matrix
-            )
-            
-            self.logger.info("Data generation completed successfully:")
-            self.logger.info(f"  Orders: {data_summary['orders']['count']} (Total volume: {data_summary['orders']['total_volume']:.1f} m³)")
-            self.logger.info(f"  Trucks: {data_summary['trucks']['count']} (Total capacity: {data_summary['trucks']['total_capacity']:.1f} m³)")
-            self.logger.info(f"  Feasibility: {'Yes' if data_summary['feasibility']['capacity_sufficient'] else 'No'}")
+            self.logger.info(f"Generated {len(self.orders_df)} orders, {len(self.trucks_df)} trucks, {self.distance_matrix.shape[0]}x{self.distance_matrix.shape[1]} distance matrix")
             
             return True
             
@@ -374,15 +314,16 @@ class ValidationManager:
             return False
 
 
-class VisualizationManager:
+class CLIVisualizationManager:
     """
-    Visualization Management Utility Class
+    CLI Visualization Management Utility Class
     
-    Handles the creation and saving of visualization plots.
+    Handles the creation and saving of static visualization plots for the CLI application.
+    Uses matplotlib to generate PNG files saved to the output directory.
     """
     
     def __init__(self, logger: logging.Logger):
-        """Initialize the VisualizationManager"""
+        """Initialize the CLIVisualizationManager"""
         self.logger = logger
     
     def create_visualizations(self, solution: Dict[str, Any], orders_df: pd.DataFrame, 
@@ -452,7 +393,7 @@ class ResultsManager:
     """
     Results Management Utility Class
     
-    Handles saving results to CSV files and formatting output.
+    Handles saving results to CSV files and Excel reports, and formatting output.
     """
     
     def __init__(self, logger: logging.Logger):
@@ -567,6 +508,105 @@ class ResultsManager:
             
         except Exception as e:
             self.logger.error(f"Error saving results to CSV: {str(e)}")
+    
+    def save_results_to_excel(self, solution: Dict[str, Any], orders_df: pd.DataFrame, 
+                             trucks_df: pd.DataFrame) -> None:
+        """
+        Save optimization results to a single Excel file with multiple sheets
+        
+        Args:
+            solution: Optimization solution dictionary
+            orders_df: Orders DataFrame
+            trucks_df: Trucks DataFrame
+        """
+        self.logger.info("Step 5: Saving results to Excel file...")
+        
+        try:
+            # Create output directory
+            output_dir = Path("output")
+            output_dir.mkdir(exist_ok=True)
+            
+            # Create Excel file path
+            excel_file = output_dir / "vehicle_router_results.xlsx"
+            
+            with pd.ExcelWriter(excel_file, engine='openpyxl') as writer:
+                # Sheet 1: Summary
+                summary_data = [{
+                    'Metric': 'Total Cost',
+                    'Value': solution['costs']['total_cost'],
+                    'Unit': 'EUR'
+                }, {
+                    'Metric': 'Trucks Used',
+                    'Value': len(solution['selected_trucks']),
+                    'Unit': 'count'
+                }, {
+                    'Metric': 'Orders Delivered',
+                    'Value': len(solution['assignments_df']),
+                    'Unit': 'count'
+                }, {
+                    'Metric': 'Total Volume',
+                    'Value': orders_df['volume'].sum(),
+                    'Unit': 'm³'
+                }, {
+                    'Metric': 'Average Utilization',
+                    'Value': sum(u['utilization_percent'] for u in solution['utilization'].values()) / len(solution['utilization']),
+                    'Unit': '%'
+                }]
+                
+                summary_df = pd.DataFrame(summary_data)
+                summary_df.to_excel(writer, sheet_name='Summary', index=False)
+                
+                # Sheet 2: Orders
+                orders_df.to_excel(writer, sheet_name='Orders', index=False)
+                
+                # Sheet 3: Trucks
+                trucks_df.to_excel(writer, sheet_name='Trucks', index=False)
+                
+                # Sheet 4: Assignments
+                solution['assignments_df'].to_excel(writer, sheet_name='Assignments', index=False)
+                
+                # Sheet 5: Routes
+                solution['routes_df'].to_excel(writer, sheet_name='Routes', index=False)
+                
+                # Sheet 6: Utilization
+                utilization_data = []
+                for truck_id, util_info in solution['utilization'].items():
+                    utilization_data.append({
+                        'Truck ID': truck_id,
+                        'Capacity (m³)': util_info['capacity'],
+                        'Used Volume (m³)': util_info['used_volume'],
+                        'Utilization (%)': util_info['utilization_percent'],
+                        'Assigned Orders': ', '.join(util_info['assigned_orders'])
+                    })
+                
+                utilization_df = pd.DataFrame(utilization_data)
+                utilization_df.to_excel(writer, sheet_name='Utilization', index=False)
+                
+                # Sheet 7: Cost Breakdown
+                cost_data = []
+                for truck_id, cost in solution['costs']['truck_costs'].items():
+                    cost_data.append({
+                        'Truck ID': truck_id,
+                        'Cost (€)': cost,
+                        'Selected': True
+                    })
+                
+                # Add unselected trucks with zero cost
+                for _, truck in trucks_df.iterrows():
+                    if truck['truck_id'] not in solution['costs']['truck_costs']:
+                        cost_data.append({
+                            'Truck ID': truck['truck_id'],
+                            'Cost (€)': 0,
+                            'Selected': False
+                        })
+                
+                cost_df = pd.DataFrame(cost_data)
+                cost_df.to_excel(writer, sheet_name='Cost Breakdown', index=False)
+            
+            self.logger.info(f"Excel report saved to {excel_file}")
+            
+        except Exception as e:
+            self.logger.error(f"Error saving results to Excel: {str(e)}")
     
     def format_solution_output(self, solution: Dict[str, Any], optimizer_type: str, 
                               depot_location: str, optimizer) -> str:
@@ -748,3 +788,4 @@ def validate_configuration(config: Dict[str, Any]) -> Dict[str, Any]:
         config['distance_weight'] = distance_weight / total_weight
     
     return config
+    

@@ -1,9 +1,4 @@
-"""
-Visualization Manager Module
-
-This module provides the VisualizationManager class for creating
-interactive charts and visualizations using Plotly in the Streamlit application.
-"""
+"""Visualization Manager Module for creating interactive charts using Plotly in Streamlit"""
 
 import streamlit as st
 import pandas as pd
@@ -15,15 +10,9 @@ from typing import Dict, Any, List, Optional
 
 
 class VisualizationManager:
-    """
-    Visualization Manager for Streamlit Application
-    
-    This class creates interactive charts and visualizations for the
-    Vehicle Router Streamlit application using Plotly.
-    """
+    """Visualization Manager for Streamlit Application using Plotly"""
     
     def __init__(self):
-        """Initialize the VisualizationManager"""
         self.color_palette = px.colors.qualitative.Set1
     
     def create_orders_volume_chart(self, orders_df: pd.DataFrame):
@@ -329,13 +318,13 @@ class VisualizationManager:
                     fig.add_trace(
                         go.Scatter(
                             x=[x_coord],
-                            y=[-0.3],  # Position below the order point
+                            y=[-0.3],
                             mode='text',
                             text=postal_code,
                             textfont=dict(size=10, color='darkblue'),
                             textposition="middle center",
                             showlegend=False,
-                            hoverinfo='skip'  # Don't show hover for postal code labels
+                            hoverinfo='skip'
                         ),
                         row=subplot_row, col=1
                     )

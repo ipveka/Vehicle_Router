@@ -1,9 +1,4 @@
-"""
-Export Manager Module
-
-This module provides the ExportManager class for creating various
-export formats including Excel reports, CSV files, and detailed text reports.
-"""
+"""Export Manager Module for creating Excel reports, CSV files, and detailed text reports"""
 
 import pandas as pd
 import io
@@ -13,30 +8,14 @@ import json
 
 
 class ExportManager:
-    """
-    Export Manager for Streamlit Application
-    
-    This class handles the creation of various export formats for the
-    Vehicle Router optimization results.
-    """
+    """Export Manager for Streamlit Application handling various export formats"""
     
     def __init__(self):
-        """Initialize the ExportManager"""
         pass
     
     def create_excel_report(self, orders_df: pd.DataFrame, trucks_df: pd.DataFrame, 
                            solution: Dict[str, Any]) -> bytes:
-        """
-        Create a comprehensive Excel report with multiple sheets
-        
-        Args:
-            orders_df: Orders data
-            trucks_df: Trucks data
-            solution: Optimization solution
-            
-        Returns:
-            bytes: Excel file content as bytes
-        """
+        """Create a comprehensive Excel report with multiple sheets"""
         # Create Excel writer object
         output = io.BytesIO()
         

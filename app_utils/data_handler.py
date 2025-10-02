@@ -1,10 +1,4 @@
-"""
-Data Handler Module
-
-This module provides the DataHandler class for loading and managing data
-in the Streamlit application. It handles both example data loading and
-custom data upload functionality.
-"""
+"""Data Handler Module for loading and managing data in the Streamlit application"""
 
 import streamlit as st
 import pandas as pd
@@ -21,28 +15,16 @@ from vehicle_router.data_generator import DataGenerator
 
 
 class DataHandler:
-    """
-    Data Handler for Streamlit Application
-    
-    This class manages data loading, validation, and preparation for the
-    Vehicle Router Streamlit application. It supports both example data
-    and custom data upload functionality.
-    """
+    """Data Handler for Streamlit Application managing data loading and validation"""
     
     def __init__(self):
-        """Initialize the DataHandler"""
         self.orders_df = None
         self.trucks_df = None
         self.distance_matrix = None
         self.data_generator = None
     
     def load_example_data(self) -> bool:
-        """
-        Load the example data using DataGenerator
-        
-        Returns:
-            bool: True if data loaded successfully, False otherwise
-        """
+        """Load the example data using DataGenerator"""
         try:
             # Initialize data generator with example data
             self.data_generator = DataGenerator(use_example_data=True)

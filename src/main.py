@@ -39,7 +39,7 @@ try:
     from src.main_utils import (
         setup_logging, validate_configuration,
         DataManager, OptimizationManager, ValidationManager, 
-        VisualizationManager, ResultsManager
+        CLIVisualizationManager, ResultsManager
     )
 except ImportError as e:
     print(f"Error importing utility modules: {e}")
@@ -72,7 +72,7 @@ class VehicleRouterApp:
         self.data_manager = DataManager(self.logger)
         self.optimization_manager = OptimizationManager(self.logger)
         self.validation_manager = ValidationManager(self.logger)
-        self.visualization_manager = VisualizationManager(self.logger)
+        self.visualization_manager = CLIVisualizationManager(self.logger)
         self.results_manager = ResultsManager(self.logger)
         
         self.logger.info("🚛 Vehicle Router Application initialized successfully")
@@ -142,9 +142,9 @@ class VehicleRouterApp:
                 )
                 self.logger.perf.end_timer("Visualization Generation")
             
-            # Step 5: Save results to CSV
+            # Step 5: Save results to Excel
             self.logger.perf.start_timer("Results Export")
-            self.results_manager.save_results_to_csv(
+            self.results_manager.save_results_to_excel(
                 self.optimization_manager.solution,
                 self.data_manager.orders_df,
                 self.data_manager.trucks_df
